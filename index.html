@@ -89,6 +89,10 @@ button,select,input{font:inherit; color:inherit; letter-spacing:inherit}
 .btn{font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:999px; border:1px solid var(--line2); background:var(--card); color:var(--ink); cursor:pointer; height:33px; transition:background .15s, transform .1s, border-color .15s}
 .btn:hover{background:var(--card2); border-color:var(--muted)} .btn:active{transform:scale(.98)}
 .btn.danger{color:var(--bad-text); border-color:color-mix(in srgb, var(--bad) 40%, transparent)}
+.btn.clear{color:var(--bad-text); border-color:color-mix(in srgb, var(--bad) 45%, transparent); background:color-mix(in srgb, var(--bad) 8%, var(--card)); font-weight:700; gap:6px; display:inline-flex; align-items:center}
+.btn.clear:hover{background:color-mix(in srgb, var(--bad) 16%, var(--card))}
+.btn.clear[disabled]{opacity:.45; cursor:default; filter:grayscale(1)}
+.btn.clear .n{display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:var(--bad); color:#fff; font-size:10.5px}
 select,input[type="search"],input[type="url"],input[type="number"]{font-size:13px; color:var(--ink); background:var(--card2); border:1px solid transparent; border-radius:10px; padding:6px 10px; min-width:120px; height:34px; transition:border-color .15s, background .15s, box-shadow .15s}
 select:hover,input:hover{border-color:var(--line2)}
 select:focus,input:focus{outline:none; border-color:var(--accent); background:var(--card); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent)}
@@ -338,6 +342,50 @@ footer h3{font-size:12px; color:var(--muted); margin-bottom:6px} footer ul{margi
   .kpis,.kpis.five{grid-template-columns:repeat(2,1fr)} .grid,.two,.calc,.result,.callouts,.opts{grid-template-columns:1fr} .donut{grid-template-columns:1fr}
   .topbar{position:static; margin:0 0 12px; padding:0 0 12px} .filters{top:8px} .brand h1{white-space:normal}
 }
+/* ---------- responsive: tablet ---------- */
+@media (max-width:1024px){
+  .wrap{padding:14px 16px 56px}
+  .grid{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(4,1fr)} .kpis.five{grid-template-columns:repeat(3,1fr)}
+  .cardhead{flex-wrap:wrap} .cardtools{flex-wrap:wrap; justify-content:flex-end}
+}
+/* ---------- responsive: phone ---------- */
+@media (max-width:640px){
+  html{-webkit-text-size-adjust:100%}
+  .wrap{padding:10px 12px 48px}
+  .topbar{position:static; margin:0 0 10px; padding:6px 0 10px; gap:10px; border-bottom:none}
+  .brand{width:100%; margin-right:0} .brand h1{font-size:21px; white-space:normal} .brand .eyebrow{font-size:10px}
+  .theme{order:2} .seg.nav{order:3; flex:1; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none} .seg.nav::-webkit-scrollbar{display:none}
+  .seg.nav button, .sheetbtn{padding:7px 12px; font-size:12.5px; white-space:nowrap}
+  .theme .sys{display:none}
+  .databar{padding:10px 12px; gap:8px 12px; border-radius:12px} .databar .status{width:100%; font-size:12px} .databar .spacer{display:none} #rangoWrap{width:100%; flex-wrap:wrap; gap:6px} .btn-primary{margin-left:auto}
+  .panel{padding:14px} .opts{grid-template-columns:1fr} .prefs{gap:8px 12px} .prefs #storeInfo{margin-left:0 !important; width:100%}
+  .kpis,.kpis.five{grid-template-columns:repeat(2,1fr); gap:8px; margin-top:10px} .kpi{padding:12px 13px; border-radius:14px} .kpi .val,.kpis.five .kpi .val{font-size:24px} .kpi .lab{font-size:11px} .kpi .sub{font-size:11px}
+  .filters{position:static; padding:10px 12px; gap:8px 10px; border-radius:14px} .filters.collapsed{position:sticky; top:8px} .fgroup{flex:1 1 calc(50% - 10px); min-width:0} .fgroup select,.fgroup input{width:100%; min-width:0} .fgroup:has(#monthChips), .fgroup:has(#fCli){flex-basis:100%}
+  .filters .count{width:100%; text-align:right; margin-left:0} .fsummary{font-size:12px} .fcollapse{margin-left:auto}
+  .card{padding:14px 14px 16px; border-radius:16px} .card h2{font-size:15.5px} .card .hint{font-size:11.5px}
+  .cardhead{flex-direction:column; align-items:stretch; gap:8px} .cardhead>div:first-child{min-width:0} .cardtools{justify-content:flex-start; gap:8px} .cardtools select{max-width:100%}
+  .two{grid-template-columns:1fr; gap:14px} .mini{grid-template-columns:repeat(3,1fr); gap:6px} .mini div{padding:9px 10px} .mini .val{font-size:18px}
+  .stat-row{grid-template-columns:1fr 1fr; gap:8px} .stat .val{font-size:20px} .stat .sub{font-size:11px}
+  .rank{gap:6px 8px} .rank .rl{max-width:110px; font-size:12px} .rank .rv{font-size:12px}
+  .donut{grid-template-columns:1fr; justify-items:center} .donut .dl{width:100%}
+  .docs{grid-template-columns:1fr auto; grid-auto-flow:row dense; gap:6px 10px} .docs .dl{grid-column:1} .docs .dv{grid-column:2; text-align:right} .docs .db{grid-column:1 / -1; margin-bottom:8px}
+  .treemap{height:220px}
+  .tablewrap{max-height:380px; border-radius:10px} table{font-size:12px} tbody td{padding:7px 8px} thead th{padding:8px 8px; font-size:10.5px}
+  footer{font-size:11.5px}
+  /* tabulador */
+  .tabhead{flex-direction:column; align-items:stretch} .tabhead .actions{flex-direction:column; align-items:stretch}
+  .seg.tabs{overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; flex-wrap:nowrap} .seg.tabs::-webkit-scrollbar{display:none} .seg.tabs button{white-space:nowrap; padding:7px 11px; font-size:12px}
+  .blockbar{flex-wrap:wrap; gap:6px 10px; padding:10px 12px} .blockbar .bn{margin-left:0}
+  .pricegrid{grid-template-columns:1fr; gap:10px} .price{padding:14px 16px 14px; gap:10px} .price .pn{font-size:16px} .price .pt,.price .pct{font-size:28px}
+  .calc{grid-template-columns:1fr} .calc .form{grid-template-columns:1fr} .toggle{padding-top:4px} .result{grid-template-columns:1fr 1fr} .result .val{font-size:22px}
+  .callouts{grid-template-columns:1fr}
+  .hcalc .rates,.hcalc .quick,.hcalc .kpi3{grid-template-columns:1fr}
+}
+@media (max-width:380px){ .kpis,.kpis.five{grid-template-columns:1fr} .stat-row{grid-template-columns:1fr} .result{grid-template-columns:1fr} }
+/* dispositivo detectado (html[data-device]) */
+html[data-device="phone"] .rank .rl{max-width:34vw}
+html[data-touch="1"] .chip, html[data-touch="1"] .btn, html[data-touch="1"] select, html[data-touch="1"] input[type="search"]{min-height:38px}
 @media print{ body{background:#fff} .filters,.databar,.panel,.topbar .seg{display:none} .card,.kpi{break-inside:avoid; box-shadow:none} .tablewrap{max-height:none} }
 @media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
 
@@ -348,7 +396,7 @@ footer h3{font-size:12px; color:var(--muted); margin-bottom:6px} footer ul{margi
 
   <div class="topbar">
     <div class="brand">
-      <div class="eyebrow">PROJEC SYSTEM · REGISTRO_CASOS · STATUS = COMPLETED</div>
+      <div class="eyebrow">DASHBOARD INTERACTIVO DEL DPTO TECNICO</div>
       <h1 id="h1">ACTIVIDADES</h1>
     </div>
     <button class="theme" id="themeBtn" type="button" role="switch" aria-checked="false" aria-label="Tema claro u oscuro" title="Tema claro / oscuro · doble clic: volver al tema del sistema">
@@ -454,7 +502,7 @@ function doGet(e) {
       <label class="fgroup"><span>Año</span><select id="fYear"></select></label>
       <div class="fgroup"><span>Mes</span><div class="chips" id="monthChips"></div></div>
       <label class="fgroup"><span>Rango rápido</span>
-        <select id="fQuick"><option value="all">Todos los meses</option><option value="3">Últimos 3 meses</option><option value="4">Últimos 4 meses</option><option value="6">Últimos 6 meses</option><option value="12">Últimos 12 meses</option></select>
+        <select id="fQuick"><option value="all">Todos los meses</option><option value="none">Ninguno (elegir a mano)</option><option value="3">Últimos 3 meses</option><option value="4">Últimos 4 meses</option><option value="6">Últimos 6 meses</option><option value="12">Últimos 12 meses</option></select>
       </label>
       <label class="fgroup"><span>Quincena</span><select id="fQ"></select></label>
       <label class="fgroup"><span>Familia</span><select id="fFam"></select></label>
@@ -469,7 +517,7 @@ function doGet(e) {
       <label class="fgroup"><span>Rol</span><select id="fRole"><option value="">Cualquier rol</option><option value="tp">Principal (TP)</option><option value="ta">Auxiliar (TA)</option><option value="ta2">TA 2</option></select></label>
       <label class="fgroup"><span>Cliente</span><input type="search" id="fCli" placeholder="Buscar cliente…"></label>
       <label class="fgroup"><span>Gráfico global</span><select id="gType"></select></label>
-      <button class="btn" id="reset" type="button">Limpiar</button>
+      <button class="btn clear" id="reset" type="button" title="Quita todos los filtros aplicados"><span aria-hidden="true">✕</span> Clear</button>
       <div class="count" id="count"></div>
     </section>
 
@@ -818,7 +866,7 @@ function drawChart(el, spec, type){
   const y = v => padT + ih - v/top*ih;
   let g = ""; const ticks = 4;
   for(let t = 0; t <= ticks; t++){ const v = top*t/ticks; g += `<line class="gl" x1="${padL}" x2="${W-padR}" y1="${y(v)}" y2="${y(v)}"></line><text class="cap" x="${padL-6}" y="${y(v)+4}" text-anchor="end">${fmtV(v)}</text>`; }
-  const slot = iw / n, every = Math.ceil(n / 14);
+  const slot = iw / n, every = Math.max(1, Math.ceil(n / Math.max(3, Math.floor(iw / (W < 600 ? 62 : 48)))));
   const xs = spec.items.map((_,i) => padL + slot*i + slot/2);
   const labels = spec.items.map((it,i) => i % every === 0 ? `<text class="cap" x="${xs[i]}" y="${H-padB+16}" text-anchor="middle">${esc(shortLabel(it.k, n))}</text>` : "").join("");
   let marks = "";
@@ -847,7 +895,7 @@ function drawChart(el, spec, type){
   el.querySelectorAll("[data-i]").forEach(m => bindTip(m, tipOf(spec.items[+m.dataset.i], +m.dataset.s)));
 }
 function niceTop(max){ const step = max <= 10 ? 2 : max <= 20 ? 5 : max <= 60 ? 10 : max <= 150 ? 20 : max <= 600 ? 100 : max <= 3000 ? 500 : max <= 15000 ? 2000 : 10000; return Math.max(step, Math.ceil(max*1.12/step)*step); }
-function shortLabel(k, n){ const s = String(k); const L = n > 10 ? 6 : n > 6 ? 9 : 14; return s.length > L ? s.slice(0, L-1) + "…" : s; }
+function shortLabel(k, n){ const s = String(k); const ph = document.documentElement.getAttribute("data-device") === "phone"; const L = ph ? (n > 6 ? 4 : n > 4 ? 6 : 9) : (n > 10 ? 6 : n > 6 ? 9 : 14); return s.length > L ? s.slice(0, L-1) + "…" : s; }
 function squarify(areas, x, y, w, h){
   const out = []; let items = areas.map((a,i)=>({a,i})); let cx = x, cy = y, cw = w, ch = h;
   while(items.length){
@@ -1056,15 +1104,20 @@ function renderTable(rows){
 }
 let filtersCollapsed = false;
 function setFiltersCollapsed(v){ filtersCollapsed = !!v; const f = document.getElementById("filters"); f.classList.toggle("collapsed", filtersCollapsed); const b = document.getElementById("fcollapse"); b.setAttribute("aria-expanded", !filtersCollapsed); b.querySelector("span").textContent = filtersCollapsed ? "Mostrar filtros" : "Ocultar filtros"; renderFilterSummary(); }
+function activeFilterCount(){ let n = ["q","fam","act","cas","cat","ins","rep","lim","ret","tech","cli"].filter(k => state[k]).length; if(state.months.size) n++; return n; }
+function clearFilters(){ ["q","fam","act","cas","cat","ins","rep","lim","ret","tech","role","cli"].forEach(k => state[k] = ""); ["fQ","fFam","fAct","fCas","fCat","fIns","fRep","fLim","fRet","fTech","fRole"].forEach(id => document.getElementById(id).value = ""); document.getElementById("fCli").value = ""; document.getElementById("fQuick").value = "none"; state.months = new Set(); document.querySelectorAll("#monthChips .chip").forEach(b => b.setAttribute("aria-pressed","false")); render(); }
+function paintClear(){ const n = activeFilterCount(); const b = document.getElementById("reset"); b.disabled = n === 0; b.innerHTML = `<span aria-hidden="true">✕</span> Clear${n ? ` <span class="n">${n}</span>` : ""}`; }
 function renderFilterSummary(){
   const rows = DATA.length ? filtered() : [];
   const sel = [...state.months].sort((a,b)=>a-b), per = periods();
-  const mesTxt = !sel.length ? "—" : sel.length === per.length ? "todos los meses" : sel.length === 1 ? plabelL(sel[0]) : plabel(sel[0]) + " – " + plabel(sel[sel.length-1]) + " (" + sel.length + ")";
+  const mesTxt = !sel.length ? "sin meses seleccionados" : sel.length === per.length ? "todos los meses" : sel.length === 1 ? plabelL(sel[0]) : plabel(sel[0]) + " – " + plabel(sel[sel.length-1]) + " (" + sel.length + ")";
   const act = [["Quincena",state.q],["Familia",state.fam],["Actividad",state.act],["Case",state.cas],["Categoría",state.cat],["Aseguradora",state.ins],["REP",state.rep],["Límite",state.lim],["Retiro",state.ret],["Técnico",state.tech ? state.tech + (state.role ? " (" + state.role.toUpperCase() + ")" : "") : ""],["Cliente",state.cli]].filter(x => x[1]);
-  document.getElementById("fsummary").innerHTML = `<b>${state.year === ALLY ? "Todos los años" : state.year || ""}</b><span>·</span><span>${mesTxt}</span>${act.map(x => `<span class="pill">${esc(x[0])}: ${esc(x[1])}</span>`).join("")}${act.length ? "" : '<span class="pill" style="background:var(--card2); color:var(--muted)">sin filtros adicionales</span>'}<span style="margin-left:auto"><b>${rows.length}</b> de ${DATA.length} proyectos</span>`;
+  document.getElementById("fsummary").innerHTML = `<b>${state.year === ALLY ? "Todos los años" : state.year || ""}</b><span>·</span><span>${mesTxt}</span>${act.map(x => `<span class="pill">${esc(x[0])}: ${esc(x[1])}</span>`).join("")}${act.length ? "" : '<span class="pill" style="background:var(--card2); color:var(--muted)">sin filtros adicionales</span>'}<span style="margin-left:auto"><b>${rows.length}</b> de ${DATA.length} actividades</span>${activeFilterCount() ? `<button class="btn clear" type="button" id="resetMini" title="Quita todos los filtros aplicados"><span aria-hidden="true">✕</span> Clear <span class="n">${activeFilterCount()}</span></button>` : ""}`;
+  const rm = document.getElementById("resetMini"); if(rm) rm.onclick = clearFilters;
+  paintClear();
 }
 document.getElementById("fcollapse").onclick = () => { setFiltersCollapsed(!filtersCollapsed); saveUI(); };
-function render(){ const rows = filtered(); document.getElementById("count").innerHTML = `<b>${rows.length}</b> de ${DATA.length} proyectos`; renderHeader(); renderKpis(rows); renderCharts(rows); renderTable(rows); renderFilterSummary(); saveUI(); }
+function render(){ const rows = filtered(); document.getElementById("count").innerHTML = state.months.size ? `<b>${rows.length}</b> de ${DATA.length} actividades` : `<span style="color:var(--warn)">Selecciona uno o más meses</span> · ${DATA.length} actividades`; renderHeader(); renderKpis(rows); renderCharts(rows); renderTable(rows); renderFilterSummary(); saveUI(); }
 let rsT; window.addEventListener("resize", () => { clearTimeout(rsT); rsT = setTimeout(() => { if(DATA.length) renderCharts(filtered()); }, 200); });
 
 /* ---------- controles ---------- */
@@ -1072,9 +1125,9 @@ function fillSelect(id, label, values, key, keep){ const el = document.getElemen
 function buildMonthChips(){
   const months = periods(), wrap = document.getElementById("monthChips");
   wrap.innerHTML = months.map(m => `<button class="chip" type="button" data-m="${m}" aria-pressed="${state.months.has(m)}" title="${plabelL(m)}">${plabel(m)}</button>`).join("") || `<span style="font-size:12px;color:var(--muted)">Sin meses</span>`;
-  wrap.querySelectorAll(".chip").forEach(btn => btn.onclick = () => { const n = +btn.dataset.m; if(state.months.has(n)){ if(state.months.size === 1) return; state.months.delete(n); } else state.months.add(n); btn.setAttribute("aria-pressed", state.months.has(n)); document.getElementById("fQuick").value = "all"; render(); });
+  wrap.querySelectorAll(".chip").forEach(btn => btn.onclick = () => { const n = +btn.dataset.m; if(state.months.has(n)) state.months.delete(n); else state.months.add(n); btn.setAttribute("aria-pressed", state.months.has(n)); document.getElementById("fQuick").value = "all"; render(); });
 }
-function applyQuick(v){ const months = periods(); state.months = new Set(v === "all" ? months : months.slice(-Number(v))); document.querySelectorAll("#monthChips .chip").forEach(b => b.setAttribute("aria-pressed", state.months.has(+b.dataset.m))); }
+function applyQuick(v){ const months = periods(); state.months = new Set(v === "all" ? months : v === "none" ? [] : months.slice(-Number(v))); document.querySelectorAll("#monthChips .chip").forEach(b => b.setAttribute("aria-pressed", state.months.has(+b.dataset.m))); }
 function setYear(y, keepFilters){
   state.year = y;
   DATA = ALL.filter(r => r.status === "COMPLETED" && (y === ALLY || r.y === y)).sort((a,b) => a.ts - b.ts);
@@ -1409,7 +1462,7 @@ document.getElementById("copyGs").onclick = async e => { const code = document.g
 document.getElementById("fQuick").onchange = e => { applyQuick(e.target.value); render(); };
 document.getElementById("fRole").onchange = e => { state.role = e.target.value; render(); };
 document.getElementById("fCli").oninput = e => { state.cli = e.target.value.trim().toLowerCase(); render(); };
-document.getElementById("reset").onclick = () => { ["q","fam","act","cas","cat","ins","rep","lim","ret","tech","role","cli"].forEach(k => state[k] = ""); ["fQ","fFam","fAct","fCas","fCat","fIns","fRep","fLim","fRet","fTech","fRole"].forEach(id => document.getElementById(id).value = ""); document.getElementById("fCli").value = ""; document.getElementById("fQuick").value = "all"; applyQuick("all"); render(); };
+document.getElementById("reset").onclick = clearFilters;
 
 /* tema claro / oscuro */
 const STORE_THEME = "opsdash3:theme";
@@ -1428,10 +1481,12 @@ function showPage(p){ currentPage = p; document.querySelectorAll(".topbar .seg b
 document.querySelectorAll(".topbar .seg button").forEach(b => b.onclick = () => showPage(b.dataset.page));
 
 /* Arranque: pestaña nueva → consulta la fuente · F5 → datos guardados · sin nada → sheet por defecto */
+function detectDevice(){ const w = window.innerWidth; const d = w <= 640 ? "phone" : w <= 1024 ? "tablet" : "desktop"; document.documentElement.setAttribute("data-device", d); document.documentElement.setAttribute("data-touch", (navigator.maxTouchPoints > 0 || matchMedia("(pointer:coarse)").matches) ? "1" : "0"); return d; }
+detectDevice(); window.addEventListener("resize", detectDevice);
 (function init(){
   document.getElementById("persist").checked = PERSIST;
   const ui = readJSON(STORE_UI);
-  if(ui){ state.year = ui.year ?? null; pendingMonths = Array.isArray(ui.months) ? ui.months : null; Object.assign(state, ui.f || {}); state.sort = ui.sort || "date"; state.dir = ui.dir || "asc"; if(ui.quick) document.getElementById("fQuick").value = ui.quick; if(typeof ui.tabBlock !== "undefined") tabBlock = ui.tabBlock; if(ui.fcol) setFiltersCollapsed(true); if(ui.fire) Object.assign(fireCalcState, ui.fire); if(ui.hours && Array.isArray(ui.hours.rows) && ui.hours.rows.length) Object.assign(hoursState, ui.hours); }
+  if(ui){ state.year = ui.year ?? null; pendingMonths = Array.isArray(ui.months) ? ui.months : null; Object.assign(state, ui.f || {}); state.sort = ui.sort || "date"; state.dir = ui.dir || "asc"; if(ui.quick) document.getElementById("fQuick").value = ui.quick; if(typeof ui.tabBlock !== "undefined") tabBlock = ui.tabBlock; if(ui.fcol || (ui.fcol === undefined && detectDevice() === "phone")) setFiltersCollapsed(true); if(ui.fire) Object.assign(fireCalcState, ui.fire); if(ui.hours && Array.isArray(ui.hours.rows) && ui.hours.rows.length) Object.assign(hoursState, ui.hours); }
   buildChartSelectors();
   const cfg = readJSON(STORE_CFG) || DEFAULT_CFG, cache = readJSON(STORE_DATA), tabc = readTab();
   const nav = performance.getEntriesByType("navigation")[0], isReload = nav && nav.type === "reload";
@@ -1442,6 +1497,7 @@ document.querySelectorAll(".topbar .seg button").forEach(b => b.onclick = () => 
   renderTab();
   if(ui && ui.calc){ const c = ui.calc; if(c.block) { document.getElementById("cBlock").value = c.block; fillCalcCases(); } if(c.cas) document.getElementById("cCase").value = c.cas; document.getElementById("cMiles").value = c.miles || 0; document.getElementById("cRet").checked = c.ret !== false; document.getElementById("cBonus").checked = !!c.bonus; }
   calc(); updateStoreInfo();
+  if(!ui && detectDevice() === "phone") setFiltersCollapsed(true);
   if(cache){ loadDataset(cache.rows, cache.source, cache.at); statusLine("ok"); }
   if(ui && ui.page === "tab") showPage("tab");
   if(cfg.kind === "xlsx"){ if(!cache) setStatus("", "Fuente: archivo .xlsx — pulsa Actualizar para cargarlo."); return; }
