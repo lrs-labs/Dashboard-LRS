@@ -274,7 +274,8 @@ footer h3{font-size:12px; color:var(--muted); margin-bottom:6px} footer ul{margi
 .price::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--tc); opacity:.9}
 .price>*{position:relative}
 .price:hover{transform:translateY(-2px); box-shadow:var(--shadow-hover)}
-.price.sel{border-color:var(--tc); box-shadow:0 0 0 2px color-mix(in srgb, var(--tc) 30%, transparent), var(--shadow-hover)}
+.price.sel{border-color:var(--ok); box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 40%, transparent), var(--shadow-hover)}
+.price .cartbadge{position:absolute; top:14px; right:14px; min-width:24px; height:24px; padding:0 7px; border-radius:999px; background:var(--ok); color:#fff; font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,.3); z-index:1}
 .price .ph{display:flex; align-items:center; gap:12px}
 .price .pi{width:42px; height:42px; border-radius:12px; flex:none; display:grid; place-items:center; background:color-mix(in srgb, var(--tc) 14%, var(--card)); color:color-mix(in srgb, var(--tc) 70%, var(--ink))}
 .price .pi svg{width:24px; height:24px}
@@ -337,6 +338,58 @@ footer h3{font-size:12px; color:var(--muted); margin-bottom:6px} footer ul{margi
 .callout{border-radius:14px; padding:14px 16px; font-size:12.5px; line-height:1.55; color:var(--ink)}
 .callout.y{background:color-mix(in srgb, var(--warn) 18%, var(--card))} .callout.p{background:color-mix(in srgb, var(--bad) 10%, var(--card))} .callout.g{background:color-mix(in srgb, var(--ok) 14%, var(--card))}
 .callouts{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px}
+
+/* ---------- calculadora rapida (multi-caso) ---------- */
+.qcalc-layout{display:flex; flex-direction:column; gap:16px; margin-top:14px}
+.qcalc-main{min-width:0}
+.qcalc-side{display:flex; flex-direction:column; gap:14px}
+.qcalc-miles{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap}
+.qcalc-miles .hint{margin-top:2px}
+.qcalc-miles input{width:74px}
+.qcalc-cart{display:flex; flex-direction:column; gap:8px}
+.qcalc-row{padding:10px 12px; border-radius:14px; background:var(--card2); display:flex; flex-direction:column; gap:6px}
+.qcalc-row-top{display:flex; align-items:center; gap:8px}
+.qcalc-row-top .dot{width:8px; height:8px; border-radius:3px; flex:none}
+.qcalc-row-top .nm{flex:1; min-width:0; font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.qcalc-row-top .lt{font-size:13.5px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap}
+.qcalc-row-top .rm{flex:none; width:24px; height:24px; border-radius:50%; border:none; background:var(--card3); color:var(--ink2); cursor:pointer; font-size:12px; display:grid; place-items:center}
+.qcalc-row-bottom{display:flex; align-items:center; flex-wrap:wrap; gap:6px 8px; padding-left:16px; font-size:11.5px; color:var(--ink2)}
+.qcalc-row-bottom .amt s{color:var(--muted); text-decoration-color:var(--muted)}
+.qcalc-linebtn{font-size:11px; font-weight:700; padding:5px 11px; border-radius:999px; border:1.5px solid var(--line2); background:var(--card); color:var(--ink2); cursor:pointer; transition:background .15s,border-color .15s,color .15s}
+.qcalc-linebtn.tp.on{background:var(--accent); border-color:var(--accent); color:#fff}
+.qcalc-linebtn.ta.on{background:color-mix(in srgb, var(--accent) 65%, var(--fam-3)); border-color:color-mix(in srgb, var(--accent) 65%, var(--fam-3)); color:#fff}
+.qcalc-linebtn.pickup.on{background:color-mix(in srgb, var(--warn) 30%, var(--card)); border-color:var(--warn); color:var(--ink)}
+.qcalc-linebtn.bono.on{background:color-mix(in srgb, var(--ok) 20%, var(--card)); border-color:var(--ok); color:var(--ok-text)}
+.qcalc-refsel{font-size:12px; background:var(--card); border:1px solid var(--line2); border-radius:8px; padding:4px 8px; max-width:100%; height:auto}
+.qcalc-empty{padding:28px 16px; text-align:center; color:var(--muted); font-size:12.5px; border-radius:14px; background:var(--card2); border:1px dashed var(--line2)}
+.qcalc-bar{position:sticky; bottom:14px; z-index:25; background:var(--card); border-radius:16px; box-shadow:var(--shadow-hover); border:1px solid var(--line2); padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px}
+.qcalc-bar-breakdown{display:flex; flex-wrap:wrap; gap:3px 12px; font-size:12px; color:var(--ink2); font-variant-numeric:tabular-nums}
+.qcalc-bar-breakdown b{color:var(--ink)}
+.qcalc-bar-total{text-align:right; flex:none}
+.qcalc-bar-total .l{font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:700}
+.qcalc-bar-total .v{font-size:21px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.qcalc-pdfbtn{width:100%}
+.qcalc-fireadd{margin-top:12px}
+@media (min-width:900px){
+  .qcalc-layout{flex-direction:row; align-items:flex-start}
+  .qcalc-main{flex:1}
+  .qcalc-side{width:360px; flex:none; position:sticky; top:78px; max-height:calc(100vh - 96px); overflow-y:auto; padding-right:2px}
+}
+#qPrintView{display:none}
+@media print{
+  body.print-calc *{visibility:hidden}
+  body.print-calc #qPrintView, body.print-calc #qPrintView *{visibility:visible}
+  body.print-calc #qPrintView{display:block; position:fixed; inset:0; background:#fff; color:#1d1d1f; padding:26px; overflow:visible}
+  #qPrintView h1{font-size:20px; margin:0 0 4px}
+  #qPrintView .psub{font-size:11px; color:#6e6e73; margin-bottom:16px}
+  #qPrintView table{width:100%; border-collapse:collapse; font-size:12px}
+  #qPrintView th,#qPrintView td{padding:7px 8px; border-bottom:1px solid #ddd; text-align:left; vertical-align:top}
+  #qPrintView th.num,#qPrintView td.num{text-align:right; font-variant-numeric:tabular-nums}
+  #qPrintView .prole{color:#6e6e73; font-size:11px}
+  #qPrintView .ptot{margin-top:18px; display:flex; flex-direction:column; align-items:flex-end; gap:5px; font-size:13px}
+  #qPrintView .pgrand{font-size:18px; font-weight:800; margin-top:4px}
+  @page{margin:14mm}
+}
 
 @media (max-width:960px){
   .kpis,.kpis.five{grid-template-columns:repeat(2,1fr)} .grid,.two,.calc,.result,.callouts,.opts{grid-template-columns:1fr} .donut{grid-template-columns:1fr}
@@ -671,29 +724,35 @@ function doGet(e) {
         <button class="btn" type="button" id="tabPrintBtn" title="Exporta el tabulador completo (todos los bloques) a PDF o impresora"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true" style="margin-right:6px; vertical-align:-2px"><path d="M4 6V2.5h8V6M4 12H2.5V7.5h11V12H12M4.5 10h7v4h-7z"/></svg>Exportar PDF / Imprimir</button>
       </div>
     </div>
-    <div id="tabBar"></div>
-    <div class="pricegrid" id="priceGrid"></div>
-    <div id="tabExtra"></div>
-    <div class="calc">
-      <div class="card">
-        <h2>Calculadora de pago</h2>
-        <div class="hint" style="margin-bottom:12px">Cuánto cobra cada rol en un proyecto y cómo se reparte entre el día del proyecto y el retiro</div>
-        <div class="form">
-          <label>Bloque<select id="cBlock"></select></label>
-          <label>Caso<select id="cCase"></select></label>
-          <label>Millas extra (más de 150)<input type="number" id="cMiles" min="0" value="0" step="1"></label>
-          <div class="toggle"><input type="checkbox" id="cRet" checked><span>El mismo equipo realiza el retiro</span></div>
-          <div class="toggle"><input type="checkbox" id="cBonus"><span>Bono $50 (remediación con resultado negativo)</span></div>
-        </div>
+    <div class="qcalc-layout">
+      <div class="qcalc-main">
+        <div id="tabBar"></div>
+        <div class="pricegrid" id="priceGrid"></div>
+        <div id="tabExtra"></div>
       </div>
-      <div class="card">
-        <h2 id="cTitle">Resultado</h2>
-        <div class="hint" id="cSub" style="margin-bottom:12px">—</div>
-        <div class="result" id="cResult"></div>
+      <div class="qcalc-side">
+        <h2 style="font-size:15px">Calculadora de pago</h2>
+        <div class="hint" style="margin-top:-8px">Toca los casos de arriba para agregarlos — tócalos varias veces si hay más de uno igual el mismo día. Cada línea trae TP y TA activados y un botón +pickup para el 30% del retiro</div>
+        <div class="card qcalc-miles">
+          <span>Millas extra<span class="hint">más de 150, +$1 a TP y TA</span></span>
+          <input type="number" id="qMiles" min="0" value="0" step="1">
+        </div>
+        <div class="callout y" id="qNote" hidden></div>
+        <div class="card" id="qCartCard" hidden>
+          <h2 style="font-size:14px">Desglose de hoy</h2>
+          <div class="qcalc-cart" id="qCart" style="margin-top:10px"></div>
+        </div>
+        <div class="qcalc-empty" id="qEmpty">Todavía no seleccionaste ningún caso.</div>
+        <div class="qcalc-bar" id="qBar" hidden>
+          <div class="qcalc-bar-breakdown" id="qBarBreak"></div>
+          <div class="qcalc-bar-total"><div class="l">Total del día</div><div class="v" id="qBarTotal">$0</div></div>
+        </div>
+        <button class="btn-primary qcalc-pdfbtn" type="button" id="qPdfBtn" hidden>Descargar PDF para el técnico</button>
       </div>
     </div>
     <div class="callouts" id="tabNotes"></div>
     <div id="tabPrint"></div>
+    <div id="qPrintView"></div>
   </section>
 </div>
 
@@ -1198,7 +1257,7 @@ function parseTabCells(cells){
   notes.push(TAB_FALLBACK.notes[2], TAB_FALLBACK.notes[3]);
   return {blocks, fire: fire.length ? fire : TAB_FALLBACK.fire, flood: flood || TAB_FALLBACK.flood, notes};
 }
-let tabBlock = 0, tabSel = null;
+let tabBlock = 0;
 /* --- tabulador: colores, iconos y render --- */
 const BLOCK_KEY = name => /REMED/i.test(name) ? "rem" : /OTRA/i.test(name) ? "otr" : /MITIG/i.test(name) ? "mit" : "otr";
 const BLOCK_LABEL = {mit:"MITIGATION", rem:"REMEDIATION", otr:"OTRAS", fire:"FIRE", flood:"FLOOD", calc:"CALCULATOR"};
@@ -1227,13 +1286,15 @@ function iconFor(caso){ const c = String(caso).toUpperCase();
 const svgIcon = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 const milesNote = `<div class="pm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 22s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>Más de 150 millas: +$1 por milla, TP y TA</div>`;
 function priceCard(r, key, i, interactive){
-  const sel = interactive && tabSel && tabSel.block === tabBlock && tabSel.i === i ? " sel" : "";
+  const cnt = interactive ? cartCountCase(tabBlock, i) : 0;
+  const sel = cnt > 0 ? " sel" : "";
+  const badge = cnt > 0 ? `<span class="cartbadge">${cnt > 1 ? "×" + cnt : "✓"}</span>` : "";
   const head = `<div class="ph"><div class="pi">${svgIcon(iconFor(r.caso))}</div><div><div class="pn">${esc(r.caso)}</div><span class="pb">${BLOCK_LABEL[key]}</span></div></div>`;
   const di = interactive ? ` data-i="${i}"` : "";
-  if(r.pctOnly != null) return `<article class="price b-${key}${sel}"${di}>${head}<div class="pct">${r.pctOnly}%<small>del proyecto</small></div><div class="pm">Se paga el día del retiro; el 70% se pagó el día del proyecto</div>${milesNote}</article>`;
-  if(r.tp == null) return `<article class="price b-${key}${sel}"${di}>${head}<div class="pt">${r.total != null ? money(r.total) : "—"}${r.total != null ? "<small>total</small>" : ""}</div><div class="pm">${esc(r.note || "Según proyecto")}</div></article>`;
+  if(r.pctOnly != null) return `<article class="price b-${key}${sel}"${di}>${head}${badge}<div class="pct">${r.pctOnly}%<small>del proyecto</small></div><div class="pm">Se paga el día del retiro; el 70% se pagó el día del proyecto</div>${milesNote}</article>`;
+  if(!r.tp && !r.ta) return `<article class="price b-${key}${sel}"${di}>${head}${badge}<div class="pt">${r.total ? money(r.total) : "—"}${r.total ? "<small>total</small>" : ""}</div><div class="pm">${esc(r.note || "Según proyecto")}</div></article>`;
   const tp70 = Math.round(r.tp*0.7), ta70 = Math.round(r.ta*0.7), mx = Math.max(r.tp, r.ta, 1);
-  return `<article class="price b-${key}${sel}"${di}>${head}
+  return `<article class="price b-${key}${sel}"${di}>${head}${badge}
     <div class="pt">${money(r.total)}<small>TP + TA</small></div>
     <div class="roles"><div class="role"><div class="rl">TP · principal</div><div class="rv">${money(r.tp)}</div><div class="rb"><i style="width:${r.tp/mx*100}%"></i></div></div><div class="role"><div class="rl">TA · auxiliar</div><div class="rv">${money(r.ta)}</div><div class="rb"><i style="width:${r.ta/mx*100}%"></i></div></div></div>
     <div class="splitg"><div><div class="sl">Proyecto · 70%</div><div class="sv">TP <b>${money(tp70)}</b> · TA <b>${money(ta70)}</b></div></div><div><div class="sl">Retiro · 30%</div><div class="sv">TP <b>${money(r.tp-tp70)}</b> · TA <b>${money(r.ta-ta70)}</b></div></div></div>
@@ -1246,7 +1307,11 @@ function fireCards(T){
     <div class="pt">${money(f.tp + f.ta)}<small>por zona · TP + TA</small></div>
     <div class="roles"><div class="role"><div class="rl">TP · por zona</div><div class="rv">${money(f.tp)}</div><div class="rb"><i style="width:${f.tp/Math.max(f.tp,f.ta)*100}%"></i></div></div><div class="role"><div class="rl">TA · por zona</div><div class="rv">${money(f.ta)}</div><div class="rb"><i style="width:${f.ta/Math.max(f.tp,f.ta)*100}%"></i></div></div></div>
     <div class="pm">Se suma al monto base del FIRE por cada zona adicional de este tipo</div></article>`).join("");
-  const baseCard = base ? `<article class="price b-fire"><div class="ph"><div class="pi">${svgIcon(ICONS.fire)}</div><div><div class="pn">FIRE · base</div><span class="pb">MITIGATION · monto fijo</span></div></div>
+  const mitIdx = T.blocks.findIndex(b => /MITIG/i.test(b.name)), fireRowIdx = mitIdx >= 0 ? T.blocks[mitIdx].rows.findIndex(r => /^FIRE$/i.test(r.caso)) : -1;
+  const baseCnt = fireRowIdx >= 0 ? cartCountCase(mitIdx, fireRowIdx) : 0;
+  const baseSel = baseCnt > 0 ? " sel" : "";
+  const baseBadge = baseCnt > 0 ? `<span class="cartbadge">${baseCnt > 1 ? "×" + baseCnt : "✓"}</span>` : "";
+  const baseCard = base ? `<article class="price b-fire${baseSel}" data-fire-base="1">${baseBadge}<div class="ph"><div class="pi">${svgIcon(ICONS.fire)}</div><div><div class="pn">FIRE · base</div><span class="pb">MITIGATION · monto fijo</span></div></div>
     <div class="pt">${money(base.total)}<small>TP + TA</small></div>
     <div class="roles"><div class="role"><div class="rl">TP · base</div><div class="rv">${money(base.tp)}</div><div class="rb"><i style="width:100%"></i></div></div><div class="role"><div class="rl">TA · base</div><div class="rv">${money(base.ta)}</div><div class="rb"><i style="width:${base.ta/base.tp*100}%"></i></div></div></div>
     <div class="pm">Monto del incendio antes de zonas extras (tabulador de MITIGATION)</div></article>` : "";
@@ -1301,7 +1366,7 @@ function fireCalcHTML(){ return `<div class="calc" id="fireCalc" style="margin-t
       <label>Zonas Solo Clean<input type="number" id="fSC" min="0" step="1" value="${fireCalcState.sc}"></label>
       <div class="toggle" style="grid-column:1/-1; padding-top:4px"><input type="checkbox" id="fBase" ${fireCalcState.base ? "checked" : ""}><span>Incluir el monto base del FIRE (tabulador MITIGATION)</span></div>
     </div></div>
-  <div class="card"><h2>Resultado</h2><div class="hint" id="fSub" style="margin-bottom:12px">—</div><div class="result" id="fResult"></div></div></div>`; }
+  <div class="card"><h2>Resultado</h2><div class="hint" id="fSub" style="margin-bottom:12px">—</div><div class="result" id="fResult"></div><button class="btn-primary qcalc-fireadd" type="button" id="fAddCart">Agregar zonas extras al desglose</button></div></div>`; }
 function fireCalc(){
   const T = TABU || TAB_FALLBACK, base = fireBase(T);
   const dc = Math.max(0, +(document.getElementById("fDC")||{}).value || 0), sc = Math.max(0, +(document.getElementById("fSC")||{}).value || 0), inc = !!(document.getElementById("fBase")||{}).checked;
@@ -1325,24 +1390,33 @@ function floodCards(T){ return `<article class="price b-flood"><div class="ph"><
 const blockBar = (key, title, sub, n) => `<div class="blockbar b-${key}"><span class="bt">${esc(title)}</span><span class="bs">${esc(sub)}</span>${n != null ? `<span class="bn">${n} ${n === 1 ? "caso" : "casos"}</span>` : ""}</div>`;
 function renderTab(){
   const T = TABU || TAB_FALLBACK;
-  document.getElementById("tabHint").textContent = `Pestaña TABULADOR del sheet · fuente: ${T.source || "sheet"} · toca un caso para llevarlo a la calculadora`;
+  document.getElementById("tabHint").textContent = `Pestaña TABULADOR del sheet · fuente: ${T.source || "sheet"} · toca uno o más casos para agregarlos a la calculadora`;
   const seg = document.getElementById("tabSeg");
   const tabs = [...T.blocks.map((b,i) => ({id:i, key:BLOCK_KEY(b.name)})), {id:"fire", key:"fire"}, {id:"flood", key:"flood"}, {id:"calc", key:"calc"}];
   seg.innerHTML = tabs.map(t => `<button role="tab" class="b-${t.key}" aria-selected="${String(t.id) === String(tabBlock)}" data-b="${t.id}">${BLOCK_LABEL[t.key]}</button>`).join("");
   seg.querySelectorAll("button").forEach(b => b.onclick = () => { tabBlock = isNaN(+b.dataset.b) ? b.dataset.b : +b.dataset.b; renderTab(); saveUI(); });
   const grid = document.getElementById("priceGrid"), extra = document.getElementById("tabExtra"), bar = document.getElementById("tabBar");
   extra.innerHTML = "";
-  if(tabBlock === "fire"){ bar.innerHTML = blockBar("fire", "FIRE", BLOCK_SUB.fire, T.fire.length); grid.innerHTML = fireCards(T); extra.innerHTML = fireCalcHTML() + fireTable(T); ["fDC","fSC","fBase"].forEach(id => document.getElementById(id).addEventListener("input", fireCalc)); fireCalc(); }
-  else if(tabBlock === "flood"){ bar.innerHTML = blockBar("flood", "FLOOD", BLOCK_SUB.flood, null); grid.innerHTML = floodCards(T); }
+  if(tabBlock === "fire"){
+    bar.innerHTML = blockBar("fire", "FIRE", BLOCK_SUB.fire, T.fire.length);
+    grid.innerHTML = fireCards(T);
+    const fb = grid.querySelector('[data-fire-base="1"]');
+    if(fb){ const mitIdx = T.blocks.findIndex(x => /MITIG/i.test(x.name)), fireRowIdx = mitIdx >= 0 ? T.blocks[mitIdx].rows.findIndex(r => /^FIRE$/i.test(r.caso)) : -1; if(fireRowIdx >= 0) fb.onclick = () => addCartCase(mitIdx, fireRowIdx); }
+    extra.innerHTML = fireCalcHTML() + fireTable(T);
+    ["fDC","fSC","fBase"].forEach(id => document.getElementById(id).addEventListener("input", fireCalc));
+    document.getElementById("fAddCart").onclick = addFireZonesToCart;
+    fireCalc();
+  }
+  else if(tabBlock === "flood"){ bar.innerHTML = blockBar("flood", "FLOOD", BLOCK_SUB.flood, null); grid.innerHTML = floodCards(T); extra.innerHTML = floodHoursHTML(); bindFloodHours(); }
   else if(tabBlock === "calc"){ bar.innerHTML = blockBar("calc", "CALCULATOR", BLOCK_SUB.calc, null); grid.innerHTML = ""; extra.innerHTML = hoursCalcHTML(); bindHoursCalc(); hoursCalc(); }
   else {
     const b = T.blocks[tabBlock] || T.blocks[0], key = BLOCK_KEY(b.name);
     bar.innerHTML = blockBar(key, BLOCK_LABEL[key], BLOCK_SUB[key], b.rows.length);
     grid.innerHTML = b.rows.map((r,i) => priceCard(r, key, i, true)).join("");
-    grid.querySelectorAll(".price").forEach(el => el.onclick = () => { tabSel = {block:tabBlock, i:+el.dataset.i}; document.getElementById("cBlock").value = String(tabBlock); fillCalcCases(); document.getElementById("cCase").value = String(tabSel.i); calc(); renderTab(); });
+    grid.querySelectorAll(".price").forEach(el => el.onclick = () => addCartCase(tabBlock, +el.dataset.i));
   }
   document.getElementById("tabNotes").innerHTML = T.notes.map(n => `<div class="callout ${n.kind}">${esc(n.text)}</div>`).join("");
-  const cb = document.getElementById("cBlock"); if(!cb.options.length){ cb.innerHTML = T.blocks.map((b,i) => `<option value="${i}">${BLOCK_LABEL[BLOCK_KEY(b.name)]}</option>`).join(""); cb.onchange = () => { fillCalcCases(); calc(); }; fillCalcCases(); }
+  renderQCalc();
 }
 function renderTabPrint(){
   const T = TABU || TAB_FALLBACK;
@@ -1353,23 +1427,189 @@ function renderTabPrint(){
     <div class="callouts">${T.notes.map(n => `<div class="callout ${n.kind}">${esc(n.text)}</div>`).join("")}</div>`;
 }
 document.getElementById("tabPrintBtn").onclick = () => { renderTabPrint(); document.body.classList.add("print-tab"); const done = () => { document.body.classList.remove("print-tab"); window.removeEventListener("afterprint", done); }; window.addEventListener("afterprint", done); setTimeout(() => window.print(), 60); };
-function fillCalcCases(){ const T = TABU || TAB_FALLBACK; const b = T.blocks[+document.getElementById("cBlock").value] || T.blocks[0]; const cc = document.getElementById("cCase"); cc.innerHTML = b.rows.map((r,i) => `<option value="${i}">${esc(r.caso)}</option>`).join(""); cc.onchange = calc; }
-function calc(){
-  const T = TABU || TAB_FALLBACK; const b = T.blocks[+document.getElementById("cBlock").value] || T.blocks[0]; const r = b.rows[+document.getElementById("cCase").value] || b.rows[0];
-  const miles = Math.max(0, +document.getElementById("cMiles").value || 0), ret = document.getElementById("cRet").checked, bonus = document.getElementById("cBonus").checked;
-  document.getElementById("cTitle").textContent = r.caso; document.getElementById("cSub").textContent = b.name;
-  const out = document.getElementById("cResult");
-  if(r.pctOnly != null){ out.innerHTML = `<div style="grid-column:1/-1"><div class="lab">Pickup / retiro</div><div class="val">${r.pctOnly}%</div><div class="sub">Se paga el ${r.pctOnly}% del monto del proyecto original a cada rol el día del retiro. Elige el caso original para ver el monto.</div></div>`; return; }
-  if(r.tp == null){ out.innerHTML = `<div style="grid-column:1/-1"><div class="lab">Monto</div><div class="val">${r.total != null ? money(r.total) : "Según proyecto"}</div><div class="sub">${esc(r.note || "")}</div></div>`; return; }
-  const isRem = /REMEDIATION/i.test(b.name), isMit = /MITIGATION/i.test(b.name);
-  const role = (base) => { let total = base + miles; let day = Math.round(base*0.7) + miles, retiro = base - Math.round(base*0.7); let pen = 0; if(!ret && (isRem || isMit)){ pen = Math.round(base*0.3); total -= pen; } const bono = bonus && isRem ? 50 : 0; return {total: total + bono, day, retiro: ret ? retiro : 0, pen, bono}; };
-  const tp = role(r.tp), ta = role(r.ta);
-  const line = x => `${money(x.day)} día del proyecto${x.retiro ? " · " + money(x.retiro) + " al retiro" : ""}${x.pen ? ` · <span style="color:var(--bad-text)">−${money(x.pen)} retiro por otro equipo</span>` : ""}${x.bono ? " · +$50 bono" : ""}${miles ? " · +" + money(miles) + " millas" : ""}`;
-  out.innerHTML = `<div><div class="lab">TP cobra</div><div class="val">${money(tp.total)}</div><div class="sub">${line(tp)}</div></div><div><div class="lab">TA cobra</div><div class="val">${money(ta.total)}</div><div class="sub">${line(ta)}</div></div>
-    <div style="grid-column:1/-1"><div class="lab">Costo del proyecto para la compañía</div><div class="val">${money(tp.total + ta.total)}</div><div class="sub">Tabulador: ${money(r.total)} (TP ${money(r.tp)} + TA ${money(r.ta)})${miles ? ` + ${money(miles*2)} de millas` : ""}${!ret && (isRem||isMit) ? " − 30% de ambos por retiro con equipo suplente" : ""}${tp.bono ? " + $100 de bonos" : ""}</div></div>`;
+/* ---------- calculadora rapida (multi-caso) ---------- */
+let cart = [];
+const rowType = r => r.pctOnly != null ? "pickup" : (!r.tp && !r.ta) ? "flat" : "role";
+const BLOCK_COLOR = {mit:"var(--tb-mit)", rem:"var(--tb-rem)", otr:"var(--tb-otr)"};
+function retiroFrac(b){ const pr = b.rows.find(r => r.pctOnly != null); return 1 - (pr ? pr.pctOnly : 30) / 100; }
+function fireZoneRate(T, kind){ const f = T.fire.find(x => kind === "dc" ? /DEMO/i.test(x.name) : /SOLO/i.test(x.name)) || T.fire[kind === "dc" ? 0 : 1]; return f || {tp:0, ta:0}; }
+function cartCountCase(blockIdx, i){ return cart.filter(c => c.kind === "case" && c.block === blockIdx && c.i === i).length; }
+function calcItem(item){
+  const T = TABU || TAB_FALLBACK;
+  if(item.kind === "firezones"){
+    const dc = fireZoneRate(T, "dc"), sc = fireZoneRate(T, "sc");
+    const tp = item.dc*dc.tp + item.sc*sc.tp, ta = item.dc*dc.ta + item.sc*sc.ta;
+    return {label:"FIRE · Zonas extras", sub:`${item.dc} Demo+Clean, ${item.sc} Solo Clean`, tp:item.tpOn?tp:0, ta:item.taOn?ta:0, color:"var(--tb-fire)", showTgl:true, showPickup:false, showBono:false, tpPending:0, taPending:0};
+  }
+  if(item.kind === "floodhours"){
+    const tp = item.hours*T.flood.tp, ta = item.hours*T.flood.ta;
+    return {label:"FLOOD · Horas", sub:`${item.hours} h trabajadas`, tp:item.tpOn?tp:0, ta:item.taOn?ta:0, color:"var(--tb-flood)", showTgl:true, showPickup:false, showBono:false, tpPending:0, taPending:0};
+  }
+  const b = T.blocks[item.block], r = b && b.rows[item.i];
+  if(!b || !r) return {label:"—", sub:"", tp:0, ta:0, color:"var(--muted)", showTgl:false, showPickup:false, showBono:false, tpPending:0, taPending:0};
+  const key = BLOCK_KEY(b.name), type = rowType(r), color = BLOCK_COLOR[key] || "var(--muted)";
+  if(type === "flat") return {label:b.name + " · " + r.caso, sub:r.note || "", tp:0, ta:0, flatTotal:r.total || 0, color, showTgl:false, showPickup:false, showBono:false, tpPending:0, taPending:0};
+  if(type === "pickup"){
+    if(item.refI == null) return {label:b.name + " · " + r.caso, sub:"", tp:0, ta:0, color, showTgl:true, showPickup:false, showBono:false, tpPending:0, taPending:0};
+    const ref = b.rows[item.refI], frac = retiroFrac(b);
+    const tp70 = Math.round(ref.tp*frac), ta70 = Math.round(ref.ta*frac);
+    return {label:b.name + " · " + r.caso, sub:"Retiro de " + ref.caso, tp:item.tpOn?(ref.tp-tp70):0, ta:item.taOn?(ref.ta-ta70):0, color, showTgl:true, showPickup:false, showBono:false, tpPending:0, taPending:0};
+  }
+  const isMR = key === "mit" || key === "rem";
+  let tpFull, taFull, tpPending = 0, taPending = 0;
+  if(isMR){
+    const frac = retiroFrac(b), tp70 = Math.round(r.tp*frac), ta70 = Math.round(r.ta*frac), tpR = r.tp - tp70, taR = r.ta - ta70;
+    tpFull = tp70 + (item.pickup ? tpR : 0); taFull = ta70 + (item.pickup ? taR : 0);
+    tpPending = (!item.pickup && item.tpOn) ? tpR : 0; taPending = (!item.pickup && item.taOn) ? taR : 0;
+  } else { tpFull = r.tp; taFull = r.ta; }
+  const bono = item.bono && key === "rem" ? 50 : 0;
+  return {label:b.name + " · " + r.caso, sub:"", tp:(item.tpOn?tpFull:0) + (item.tpOn?bono:0), ta:(item.taOn?taFull:0) + (item.taOn?bono:0), color, showTgl:true, showPickup:isMR, showBono:key === "rem", tpPending, taPending};
 }
-["cMiles","cRet","cBonus"].forEach(id => document.getElementById(id).addEventListener("input", () => { calc(); saveUI(); }));
-document.getElementById("cCase").addEventListener("change", saveUI); document.getElementById("cBlock").addEventListener("change", saveUI);
+function qSubtotals(){
+  let tpSub = 0, taSub = 0, flatSub = 0, retiroPending = 0;
+  const miles = Math.max(0, +(document.getElementById("qMiles")||{}).value || 0);
+  cart.forEach(item => { const c = calcItem(item); tpSub += c.tp; taSub += c.ta; flatSub += c.flatTotal || 0; retiroPending += (c.tpPending||0) + (c.taPending||0); });
+  if(cart.length){ tpSub += miles; taSub += miles; }
+  return {tpSub, taSub, flatSub, retiroPending};
+}
+function addCartCase(block, i){
+  const T = TABU || TAB_FALLBACK, b = T.blocks[block], r = b && b.rows[i];
+  if(!r) return;
+  const item = {kind:"case", block, i, tpOn:true, taOn:true, bono:false};
+  const type = rowType(r), key = BLOCK_KEY(b.name);
+  if(type === "role" && (key === "mit" || key === "rem")) item.pickup = false;
+  if(type === "pickup") item.refI = null;
+  cart.push(item);
+  renderTab(); saveUI();
+}
+function stepFireZone(k, delta){
+  let item = cart.find(c => c.kind === "firezones");
+  if(!item){ item = {kind:"firezones", dc:0, sc:0, tpOn:true, taOn:true}; cart.push(item); }
+  item[k] = Math.max(0, item[k] + delta);
+  if(item.dc === 0 && item.sc === 0) cart = cart.filter(c => c !== item);
+  renderQCalc(); saveUI();
+}
+function addFireZonesToCart(){
+  const dc = Math.max(0, +(document.getElementById("fDC")||{}).value || 0), sc = Math.max(0, +(document.getElementById("fSC")||{}).value || 0);
+  if(!dc && !sc) return;
+  let item = cart.find(c => c.kind === "firezones");
+  if(!item){ item = {kind:"firezones", dc:0, sc:0, tpOn:true, taOn:true}; cart.push(item); }
+  item.dc = dc; item.sc = sc;
+  renderQCalc(); saveUI();
+}
+function floodHoursHTML(){
+  const T = TABU || TAB_FALLBACK, fh = cart.find(c => c.kind === "floodhours") || {hours:0};
+  return `<div class="card" style="margin-top:14px"><h2 style="font-size:15px">Agregar horas al desglose</h2><div class="hint" style="margin:4px 0 12px">TP ${money(T.flood.tp)}/h · TA ${money(T.flood.ta)}/h</div>
+    <label style="display:flex; flex-direction:column; gap:5px; font-size:11.5px; color:var(--muted); font-weight:600; max-width:170px">Horas trabajadas<input type="number" id="qFloodHours" min="0" step="0.5" value="${fh.hours}"></label></div>`;
+}
+function bindFloodHours(){ document.getElementById("qFloodHours").onchange = e => setFloodHours(Math.max(0, +e.target.value || 0)); }
+function setFloodHours(hours){
+  let item = cart.find(c => c.kind === "floodhours");
+  if(!item){ item = {kind:"floodhours", hours:0, tpOn:true, taOn:true}; cart.push(item); }
+  item.hours = hours;
+  if(item.hours === 0) cart = cart.filter(c => c !== item);
+  renderQCalc(); saveUI();
+}
+function pickupSelectHTML(item, b){
+  const roleRows = b.rows.map((r,idx) => ({r, idx})).filter(x => rowType(x.r) === "role");
+  return `<select class="qcalc-refsel">
+    <option value="">Elige el caso original…</option>
+    ${roleRows.map(x => `<option value="${x.idx}"${item.refI === x.idx ? " selected" : ""}>${esc(x.r.caso)}</option>`).join("")}
+  </select>`;
+}
+function cartLabelWithOrdinal(item, c){
+  if(item.kind !== "case") return c.label;
+  const sameKey = cart.filter(x => x.kind === "case" && x.block === item.block && x.i === item.i);
+  if(sameKey.length <= 1) return c.label;
+  return c.label + " #" + (sameKey.indexOf(item) + 1);
+}
+function renderQCart(){
+  const cartCard = document.getElementById("qCartCard"), empty = document.getElementById("qEmpty");
+  if(!cart.length){ cartCard.hidden = true; empty.hidden = false; document.getElementById("qBar").hidden = true; document.getElementById("qNote").hidden = true; document.getElementById("qPdfBtn").hidden = true; return; }
+  empty.hidden = true; cartCard.hidden = false; document.getElementById("qPdfBtn").hidden = false;
+  const T = TABU || TAB_FALLBACK;
+  document.getElementById("qCart").innerHTML = cart.map((item, idx) => {
+    const c = calcItem(item);
+    const lineTotal = c.flatTotal != null ? c.flatTotal : c.tp + c.ta;
+    const isPickup = item.kind === "case" && T.blocks[item.block] && rowType(T.blocks[item.block].rows[item.i]) === "pickup";
+    let subline;
+    if(isPickup){
+      subline = pickupSelectHTML(item, T.blocks[item.block]) + (item.refI != null ? `<span class="amt">${item.tpOn ? "TP " + money(c.tp) : "<s>TP</s>"} · ${item.taOn ? "TA " + money(c.ta) : "<s>TA</s>"}</span>` : "");
+    } else if(c.flatTotal != null){
+      subline = `<span class="amt">${esc(c.sub)}</span>`;
+    } else {
+      const prefix = c.sub ? esc(c.sub) + " · " : "";
+      subline = `<span class="amt">${prefix}${item.tpOn ? "TP " + money(c.tp) : "<s>TP</s>"} · ${item.taOn ? "TA " + money(c.ta) : "<s>TA</s>"}</span>`;
+    }
+    const controls = [];
+    if(c.showPickup) controls.push(`<button type="button" class="qcalc-linebtn pickup${item.pickup ? " on" : ""}" data-act="pickup" data-idx="${idx}">+pickup</button>`);
+    if(c.showTgl){
+      controls.push(`<button type="button" class="qcalc-linebtn tp${item.tpOn ? " on" : ""}" data-act="tp" data-idx="${idx}">TP</button>`);
+      controls.push(`<button type="button" class="qcalc-linebtn ta${item.taOn ? " on" : ""}" data-act="ta" data-idx="${idx}">TA</button>`);
+    }
+    if(c.showBono) controls.push(`<button type="button" class="qcalc-linebtn bono${item.bono ? " on" : ""}" data-act="bono" data-idx="${idx}">Bono +$50</button>`);
+    return `<div class="qcalc-row">
+      <div class="qcalc-row-top">
+        <span class="dot" style="background:${c.color}"></span>
+        <span class="nm">${esc(cartLabelWithOrdinal(item, c))}</span>
+        <span class="lt">${money(lineTotal)}</span>
+        <button type="button" class="rm" data-idx="${idx}" aria-label="Quitar">✕</button>
+      </div>
+      <div class="qcalc-row-bottom">${subline}${controls.join("")}</div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("#qCart .qcalc-row-top .rm").forEach(el => el.onclick = () => { cart.splice(+el.dataset.idx, 1); renderTab(); saveUI(); });
+  document.querySelectorAll("#qCart .qcalc-linebtn").forEach(el => el.onclick = () => {
+    const item = cart[+el.dataset.idx], act = el.dataset.act;
+    if(act === "pickup") item.pickup = !item.pickup;
+    else if(act === "tp") item.tpOn = !item.tpOn;
+    else if(act === "ta") item.taOn = !item.taOn;
+    else if(act === "bono") item.bono = !item.bono;
+    renderTab(); saveUI();
+  });
+  document.querySelectorAll("#qCart .qcalc-refsel").forEach((el, i) => {
+    const pickupItems = cart.filter(c => c.kind === "case" && T.blocks[c.block] && rowType(T.blocks[c.block].rows[c.i]) === "pickup");
+    el.onchange = () => { pickupItems[i].refI = el.value === "" ? null : +el.value; renderTab(); saveUI(); };
+  });
+}
+function renderQNote(){
+  const note = document.getElementById("qNote"), {retiroPending} = qSubtotals();
+  if(!cart.length || retiroPending <= 0){ note.hidden = true; return; }
+  note.hidden = false;
+  note.innerHTML = `<b>Recuerda:</b> hay casos de MITIGATION o REMEDIATION sin "+pickup" activado — solo incluyen el 70% inicial. Actívalo en la línea correspondiente para sumar ${money(retiroPending)} más por el retiro.`;
+}
+function renderQBar(){
+  const bar = document.getElementById("qBar");
+  if(!cart.length){ bar.hidden = true; return; }
+  const {tpSub, taSub, flatSub} = qSubtotals();
+  bar.hidden = false;
+  document.getElementById("qBarBreak").innerHTML = [`<span>TP <b>${money(tpSub)}</b></span>`, `<span>TA <b>${money(taSub)}</b></span>`, flatSub ? `<span>Otros <b>${money(flatSub)}</b></span>` : ""].filter(Boolean).join("");
+  document.getElementById("qBarTotal").textContent = money(tpSub + taSub + flatSub);
+}
+function renderQCalc(){ renderQCart(); renderQNote(); renderQBar(); }
+function qPrintRoleText(item, c){
+  if(c.flatTotal != null) return esc(c.sub || "");
+  const parts = [];
+  if(item.tpOn) parts.push("TP " + money(c.tp));
+  if(item.taOn) parts.push("TA " + money(c.ta));
+  if(item.pickup) parts.push("con pickup");
+  if(item.bono) parts.push("bono +$50");
+  return parts.join(" · ") || "sin rol asignado";
+}
+function buildQPrintView(){
+  const {tpSub, taSub, flatSub} = qSubtotals();
+  const rows = cart.map(item => { const c = calcItem(item), lineTotal = c.flatTotal != null ? c.flatTotal : c.tp + c.ta; return `<tr><td>${esc(cartLabelWithOrdinal(item, c))}<div class="prole">${qPrintRoleText(item, c)}</div></td><td class="num">${money(lineTotal)}</td></tr>`; }).join("");
+  const grand = tpSub + taSub + flatSub;
+  document.getElementById("qPrintView").innerHTML = `<h1>Desglose de pago</h1><div class="psub">DPTO Técnico · ${new Date().toLocaleDateString("es", {day:"numeric", month:"long", year:"numeric"})}</div>
+    <table><thead><tr><th>Proyecto / actividad</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="ptot"><div>TP <b>${money(tpSub)}</b></div><div>TA <b>${money(taSub)}</b></div>${flatSub ? `<div>Otros <b>${money(flatSub)}</b></div>` : ""}<div class="pgrand">Total del día <b>${money(grand)}</b></div></div>`;
+}
+document.getElementById("qMiles").oninput = () => { renderQCalc(); saveUI(); };
+document.getElementById("qPdfBtn").onclick = () => {
+  buildQPrintView(); document.body.classList.add("print-calc");
+  const done = () => { document.body.classList.remove("print-calc"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done); setTimeout(() => window.print(), 60);
+};
 document.getElementById("persist").onchange = e => { PERSIST = e.target.checked; try { localStorage.setItem(STORE_PERSIST, PERSIST ? "on" : "off"); } catch(_){} if(PERSIST){ savePrefs(); saveUI(); const cfg = readJSON(STORE_CFG); if(!cfg) writeJSON(STORE_CFG, DEFAULT_CFG); const th = document.documentElement.getAttribute("data-theme"); if(th) try { localStorage.setItem(STORE_THEME, th); } catch(_){} } else { try { ["opsdash3:data","opsdash3:config","opsdash3:charts","opsdash3:tab","opsdash3:ui","opsdash3:theme"].forEach(k => localStorage.removeItem(k)); } catch(_){} } updateStoreInfo(); };
 document.getElementById("clearStore").onclick = () => { if(!confirm("¿Borrar los datos cargados, la fuente y todas las preferencias guardadas en este navegador?")) return; try { Object.keys(localStorage).filter(k => k.startsWith("opsdash3:")).forEach(k => localStorage.removeItem(k)); } catch(_){} location.reload(); };
 
@@ -1385,7 +1625,7 @@ function statusLine(kind){ const src = {script:"Apps Script", sheet:"Google Shee
 const readJSON = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const writeJSON = (k,v) => { if(!PERSIST) return; try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} updateStoreInfo(); };
 function updateStoreInfo(){ const el = document.getElementById("storeInfo"); if(!el) return; let bytes = 0, n = 0; try { for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); if(k && k.startsWith("opsdash3:")){ bytes += (localStorage.getItem(k) || "").length; n++; } } } catch(e){} el.textContent = PERSIST ? (n ? `${n} elementos guardados · ${(bytes/1024).toFixed(0)} KB` : "Nada guardado todavía") : "Guardado desactivado"; }
-function saveUI(){ writeJSON(STORE_UI, {year:state.year, months:[...state.months], quick:document.getElementById("fQuick").value, f:{q:state.q, fam:state.fam, act:state.act, cas:state.cas, cat:state.cat, ins:state.ins, rep:state.rep, lim:state.lim, ret:state.ret, tech:state.tech, role:state.role, cli:state.cli}, sort:state.sort, dir:state.dir, page:currentPage, tabBlock, fcol:filtersCollapsed, fire:{dc:fireCalcState.dc, sc:fireCalcState.sc, base:fireCalcState.base}, hours:hoursState, calc:{block:document.getElementById("cBlock").value, cas:document.getElementById("cCase").value, miles:document.getElementById("cMiles").value, ret:document.getElementById("cRet").checked, bonus:document.getElementById("cBonus").checked}}); }
+function saveUI(){ writeJSON(STORE_UI, {year:state.year, months:[...state.months], quick:document.getElementById("fQuick").value, f:{q:state.q, fam:state.fam, act:state.act, cas:state.cas, cat:state.cat, ins:state.ins, rep:state.rep, lim:state.lim, ret:state.ret, tech:state.tech, role:state.role, cli:state.cli}, sort:state.sort, dir:state.dir, page:currentPage, tabBlock, fcol:filtersCollapsed, fire:{dc:fireCalcState.dc, sc:fireCalcState.sc, base:fireCalcState.base}, hours:hoursState, qcalc:{cart, miles:document.getElementById("qMiles").value}}); }
 let currentPage = "dash";
 function saveCache(rows, source){ writeJSON(STORE_DATA, {rows, source, at:new Date().toISOString()}); }
 function extractSheetId(url){ const m = String(url).match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/); return m ? m[1] : null; }
@@ -1427,7 +1667,7 @@ async function fromXlsx(file){
   if(tws){ const g = XLSX.utils.sheet_to_json(tws, {header:1, raw:false, defval:""}); const cells = []; g.forEach((row,ri) => row.forEach((v,ci) => { if(String(v).trim() !== "") cells.push([ri, ci, String(v).trim()]); })); tab = cells; }
   return {rows, tab};
 }
-function applyTab(cells, source){ if(!cells) return; try { TABU = {...parseTabCells(cells), source}; writeJSON(STORE_TAB, {cells, source, at:new Date().toISOString()}); document.getElementById("cBlock").innerHTML = ""; renderTab(); } catch(e){ console.warn("TABULADOR:", e.message); } }
+function applyTab(cells, source){ if(!cells) return; try { TABU = {...parseTabCells(cells), source}; writeJSON(STORE_TAB, {cells, source, at:new Date().toISOString()}); renderTab(); } catch(e){ console.warn("TABULADOR:", e.message); } }
 
 /* ---------- orquestación ---------- */
 const btn = document.getElementById("refresh");
@@ -1477,7 +1717,7 @@ mq.addEventListener("change", () => { if(!document.documentElement.getAttribute(
 paintThemeBtn();
 
 /* pestañas */
-function showPage(p){ currentPage = p; document.querySelectorAll(".topbar .seg button").forEach(b => b.setAttribute("aria-selected", b.dataset.page === p)); document.getElementById("pageDash").hidden = p !== "dash"; document.getElementById("pageTab").hidden = p !== "tab"; if(p === "tab"){ renderTab(); calc(); } window.scrollTo({top:0}); saveUI(); }
+function showPage(p){ currentPage = p; document.querySelectorAll(".topbar .seg button").forEach(b => b.setAttribute("aria-selected", b.dataset.page === p)); document.getElementById("pageDash").hidden = p !== "dash"; document.getElementById("pageTab").hidden = p !== "tab"; if(p === "tab") renderTab(); window.scrollTo({top:0}); saveUI(); }
 document.querySelectorAll(".topbar .seg button").forEach(b => b.onclick = () => showPage(b.dataset.page));
 
 /* Arranque: pestaña nueva → consulta la fuente · F5 → datos guardados · sin nada → sheet por defecto */
@@ -1486,7 +1726,7 @@ detectDevice(); window.addEventListener("resize", detectDevice);
 (function init(){
   document.getElementById("persist").checked = PERSIST;
   const ui = readJSON(STORE_UI);
-  if(ui){ state.year = ui.year ?? null; pendingMonths = Array.isArray(ui.months) ? ui.months : null; Object.assign(state, ui.f || {}); state.sort = ui.sort || "date"; state.dir = ui.dir || "asc"; if(ui.quick) document.getElementById("fQuick").value = ui.quick; if(typeof ui.tabBlock !== "undefined") tabBlock = ui.tabBlock; if(ui.fcol || (ui.fcol === undefined && detectDevice() === "phone")) setFiltersCollapsed(true); if(ui.fire) Object.assign(fireCalcState, ui.fire); if(ui.hours && Array.isArray(ui.hours.rows) && ui.hours.rows.length) Object.assign(hoursState, ui.hours); }
+  if(ui){ state.year = ui.year ?? null; pendingMonths = Array.isArray(ui.months) ? ui.months : null; Object.assign(state, ui.f || {}); state.sort = ui.sort || "date"; state.dir = ui.dir || "asc"; if(ui.quick) document.getElementById("fQuick").value = ui.quick; if(typeof ui.tabBlock !== "undefined") tabBlock = ui.tabBlock; if(ui.fcol || (ui.fcol === undefined && detectDevice() === "phone")) setFiltersCollapsed(true); if(ui.fire) Object.assign(fireCalcState, ui.fire); if(ui.hours && Array.isArray(ui.hours.rows) && ui.hours.rows.length) Object.assign(hoursState, ui.hours); if(ui.qcalc){ if(Array.isArray(ui.qcalc.cart)) cart = ui.qcalc.cart; if(typeof ui.qcalc.miles !== "undefined") document.getElementById("qMiles").value = ui.qcalc.miles; } }
   buildChartSelectors();
   const cfg = readJSON(STORE_CFG) || DEFAULT_CFG, cache = readJSON(STORE_DATA), tabc = readTab();
   const nav = performance.getEntriesByType("navigation")[0], isReload = nav && nav.type === "reload";
@@ -1495,8 +1735,7 @@ detectDevice(); window.addEventListener("resize", detectDevice);
   if(!document.getElementById("urlScript").value) document.getElementById("urlScript").value = DEFAULT_SCRIPT_URL;
   if(tabc && tabc.cells){ try { TABU = {...parseTabCells(tabc.cells), source: tabc.source + " (guardado)"}; } catch(e){} }
   renderTab();
-  if(ui && ui.calc){ const c = ui.calc; if(c.block) { document.getElementById("cBlock").value = c.block; fillCalcCases(); } if(c.cas) document.getElementById("cCase").value = c.cas; document.getElementById("cMiles").value = c.miles || 0; document.getElementById("cRet").checked = c.ret !== false; document.getElementById("cBonus").checked = !!c.bonus; }
-  calc(); updateStoreInfo();
+  updateStoreInfo();
   if(!ui && detectDevice() === "phone") setFiltersCollapsed(true);
   if(cache){ loadDataset(cache.rows, cache.source, cache.at); statusLine("ok"); }
   if(ui && ui.page === "tab") showPage("tab");
