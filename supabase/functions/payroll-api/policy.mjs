@@ -11,6 +11,11 @@ export function authorizePayrollRead(access) {
   return { ok: false, reason: "scope_not_configured" };
 }
 
+export function isAllowedOrigin(configuredOrigin, requestOrigin) {
+  return typeof configuredOrigin === "string" && configuredOrigin.startsWith("https://") &&
+    typeof requestOrigin === "string" && requestOrigin === configuredOrigin;
+}
+
 export function dateOnly(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
     const ms = Date.UTC(1899, 11, 30) + Math.round(value * 86400000);
