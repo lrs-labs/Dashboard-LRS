@@ -2,8 +2,13 @@ import { withSupabase } from "npm:@supabase/server@1";
 import { isAllowedOrigin } from "./policy.mjs";
 import { createPayrollBridgeEnvelope, DASHBOARD_BRIDGE_ACTION, PAYROLL_BRIDGE_ACTION, validatePayrollBridgeUrl } from "./hmac-bridge.mjs";
 import { dispatchPayrollCommand } from "./command-router.mjs";
-import { createPayrollWorkflowHandler } from "./workflow-http.mjs";
-import { createSupabaseWorkflowStore } from "./supabase-workflow-store.mjs";
+import { PAYROLL_API_BODY_LIMIT_BYTES, readRequestBodyLimited } from "./request-body-limit.mjs";
+import { createSupabaseAssignmentIdentityStore } from "./supabase-assignment-identity-store.mjs";
+import { createPayrollReadProjection } from "./payroll-source-projection.mjs";
+import { createPayrollWorkflowRuntime } from "./payroll-workflow-runtime.mjs";
+import "../../../payroll-core.js";
+
+const PAYROLL_CORE = (globalThis as any).PayrollCore;
 
 const ALLOWED_ORIGIN = Deno.env.get("APP_ORIGIN") || "";
 const NO_STORE = "no-store, private, max-age=0";
@@ -60,7 +65,7 @@ const authenticatedHandler = withSupabase({ auth: "user" }, async (request, ctx)
   if (!isAllowedOrigin(ALLOWED_ORIGIN, origin)) return response({ error: "origin_not_allowed" }, 403, "null");
   if (request.method !== "POST") return response({ error: "method_not_allowed" }, 405);
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 1024) return response({ error: "request_too_large" }, 413);
+  if (Number.isFinite(contentLength) && contentLength > PAYROLL_API_BODY_LIMIT_BYTES) return response({ error: "request_too_large" }, 413);
 
   try {
     const { data: userResult, error: userError } = await ctx.supabase.auth.getUser();
@@ -69,10 +74,25 @@ const authenticatedHandler = withSupabase({ auth: "user" }, async (request, ctx)
     const access = await accessForUser(ctx, user.id);
     // Jobs and audit use server-only RPCs, but effects remain disabled until a
     // frozen Sheet snapshot and approved Google adapters are configured.
-    const workflowStore = createSupabaseWorkflowStore(ctx.supabaseAdmin);
-    const payrollWorkflow = createPayrollWorkflowHandler({ enabled: false, ...workflowStore });
-    const rawBody = await request.text();
-    if (rawBody.length > 1024) return response({ error: "request_too_large" }, 413);
+    const workflowRuntime = createPayrollWorkflowRuntime({ supabaseAdmin: ctx.supabaseAdmin, core: PAYROLL_CORE, env: {
+      PAYROLL_WORKFLOWS_ENABLED: Deno.env.get("PAYROLL_WORKFLOWS_ENABLED") || "",
+      GOOGLE_OAUTH_CLIENT_ID: Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") || "",
+      GOOGLE_OAUTH_CLIENT_SECRET: Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") || "",
+      GOOGLE_OAUTH_REFRESH_TOKEN: Deno.env.get("GOOGLE_OAUTH_REFRESH_TOKEN") || "",
+      GOOGLE_DRIVE_NOMINAS_ROOT_ID: Deno.env.get("GOOGLE_DRIVE_NOMINAS_ROOT_ID") || "",
+      GOOGLE_PAYROLL_READ_BRIDGE_URL: Deno.env.get("GOOGLE_PAYROLL_READ_BRIDGE_URL") || "",
+      GOOGLE_PAYROLL_BRIDGE_HMAC_SECRET: Deno.env.get("GOOGLE_PAYROLL_BRIDGE_HMAC_SECRET") || "",
+      PAYROLL_EMAIL_ENABLED: Deno.env.get("PAYROLL_EMAIL_ENABLED") || "",
+      PAYROLL_PREVIEW_HMAC_SECRET: Deno.env.get("PAYROLL_PREVIEW_HMAC_SECRET") || ""
+    }, readPayrollRows: async () => {
+      const payload = await readGoogleBridge(PAYROLL_BRIDGE_ACTION);
+      if (payload.rows.length > 20000) throw new Error("payroll_payload_too_large");
+      return payload.rows;
+    } });
+    const payrollWorkflow = workflowRuntime.handler;
+    const limitedBody = await readRequestBodyLimited(request, PAYROLL_API_BODY_LIMIT_BYTES);
+    if (!limitedBody.ok) return response(limitedBody.reason === "too_large" ? { error: "request_too_large" } : { error: "invalid_request" }, limitedBody.reason === "too_large" ? 413 : 400);
+    const rawBody = limitedBody.text;
     let body: Record<string, unknown> | null = null;
     try { body = JSON.parse(rawBody); } catch { body = null; }
     if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -86,7 +106,13 @@ const authenticatedHandler = withSupabase({ auth: "user" }, async (request, ctx)
       readPayroll: async () => {
         const payload = await readGoogleBridge(PAYROLL_BRIDGE_ACTION);
         if (payload.rows.length > 20000) throw new Error("payroll_payload_too_large");
-        return { readAt: new Date().toISOString(), rows: payload.rows };
+        const { data: roster, error: rosterError } = await ctx.supabaseAdmin.rpc("lrs_payroll_technician_roster_list");
+        if (rosterError || !Array.isArray(roster)) throw new Error("technician_roster_unavailable");
+        const project = createPayrollReadProjection({ core: PAYROLL_CORE,
+          identityStore: createSupabaseAssignmentIdentityStore(ctx.supabaseAdmin),
+          readRoster: async () => roster.map((item: any) => ({ technicianId: item.technician_id, displayName: item.display_name, active: item.active === true })) });
+        const projected = await project({ rows: payload.rows, scopeMode: access?.scope_mode, technicianIds: access?.technician_ids || [] });
+        return { readAt: new Date().toISOString(), rows: projected.rows, sourceRevisions: projected.sourceRevisions };
       },
       readDashboard: async () => {
         const payload = await readGoogleBridge(DASHBOARD_BRIDGE_ACTION);

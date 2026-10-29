@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createPrivateAuthRuntime, PRIVATE_AUTH_STORAGE_KEY } from "../private-auth-runtime.mjs";
 
-const config = { enabled: true, supabaseUrl: "https://project.example.supabase.co", publishableKey: "fixture-publishable-value", allowedOrigin: "https://lrs.example.test" };
+const config = { enabled: true, supabaseUrl: "https://project.example.supabase.co", publishableKey: "sb_publishable_fixture_value_that_is_not_a_real_key", allowedOrigin: "https://lrs.example.test" };
 function memoryStorage() { const values = new Map(); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; }
 
 test("private Auth runtime constructs a PKCE session using only sessionStorage", () => {

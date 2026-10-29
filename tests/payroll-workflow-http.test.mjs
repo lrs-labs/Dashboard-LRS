@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createPayrollWorkflowHandler } from "../supabase/functions/payroll-api/workflow-http.mjs";
+import { createInvoicePreviewTokenService } from "../supabase/functions/payroll-api/invoice-preview-token.mjs";
+import { PAYROLL_API_BODY_LIMIT_BYTES, readRequestBodyLimited } from "../supabase/functions/payroll-api/request-body-limit.mjs";
 
 const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic workflow fixture");
 function closedSnapshot() {
@@ -114,6 +116,33 @@ test("confirm-send rereads the frozen source and recipient and only sends the ap
   assert.equal(result.body.email.result.messageId, "mail-fixture-1");
   assert.equal(setupValue.calls.filter(call => call === "drive-create" || call === "drive-replace").length, 1);
   assert.equal(setupValue.calls.filter(call => call === "email-send").length, 1);
+});
+
+test("the bounded API entry path accepts a complete signed confirmation body over the old 1024-byte cap", async () => {
+  const tokens = createInvoicePreviewTokenService({
+    secret: "synthetic-workflow-hmac-secret-for-test-only-32-bytes",
+    now: () => Date.parse("2026-10-29T04:00:00.000Z"),
+    createId: () => "delivery-fixture-long-token"
+  });
+  const setupValue = setup({ previewSigner: tokens, previewVerifier: tokens });
+  setupValue.setRecipient({ technicianId: "tech-fixture-1", directoryId: "recipient-fixture-1",
+    directoryVersion: `directory-v${"x".repeat(700)}`, email: "tech@example.invalid", active: true, verified: true });
+  const archived = await setupValue.handler({ body: { action: "invoice.archive", operation: "drive-and-send", periodKey: "2026-10-Q1",
+    snapshotId: "snapshot-fixture-q1", technicianId: "tech-fixture-1" } });
+  assert.equal(archived.status, 200);
+
+  const body = JSON.stringify({ action: "invoice.send-confirm", periodKey: "2026-10-Q1", snapshotId: "snapshot-fixture-q1",
+    technicianId: "tech-fixture-1", previewToken: archived.body.emailPreview.token });
+  const bytes = new TextEncoder().encode(body).byteLength;
+  assert.ok(bytes > 1024, `full signed confirmation body was only ${bytes} bytes`);
+  assert.ok(bytes < PAYROLL_API_BODY_LIMIT_BYTES);
+  const read = await readRequestBodyLimited(new Request("https://app.example.test/api/payroll", {
+    method: "POST", headers: { "content-type": "application/json" }, body
+  }), PAYROLL_API_BODY_LIMIT_BYTES);
+  assert.equal(read.ok, true);
+  const sent = await setupValue.handler({ body: JSON.parse(read.text) });
+  assert.equal(sent.status, 200);
+  assert.equal(sent.body.email.result.messageId, "mail-fixture-1");
 });
 
 test("send confirmation is rejected when the verified directory email changed after preview", async () => {

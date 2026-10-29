@@ -4,9 +4,7 @@ export function authorizePayrollRead(access) {
   }
   if (access.scope_mode === "all") return { ok: true, scope: "all" };
   if (access.scope_mode === "selected" && Array.isArray(access.technician_ids) && access.technician_ids.length > 0) {
-    // Source rows do not yet contain stable technician IDs. A name match is
-    // not an authorization boundary, so selected scopes stay fail-closed.
-    return { ok: false, reason: "stable_technician_mapping_required" };
+    return { ok: true, scope: "selected", technicianIds: [...new Set(access.technician_ids.filter(id => typeof id === "string" && id.trim()))] };
   }
   return { ok: false, reason: "scope_not_configured" };
 }

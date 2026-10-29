@@ -28,7 +28,7 @@ export async function dispatchPayrollCommand({ body, access, actorId, workflow, 
     const authorization = authorizePayrollRead(access);
     if (!authorization.ok) return { status: 403, body: { error: authorization.reason } };
     if (typeof readPayroll !== "function") return { status: 503, body: { error: "payroll_read_unavailable" } };
-    return { status: 200, body: { schema: 1, ...(await readPayroll()) } };
+    return { status: 200, body: { schema: 1, ...(await readPayroll(authorization)) } };
   }
   const authorization = authorizeDashboardRead(access);
   if (!authorization.ok) return { status: 403, body: { error: authorization.reason } };

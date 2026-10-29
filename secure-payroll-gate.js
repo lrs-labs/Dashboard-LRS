@@ -14,8 +14,9 @@
     } catch (_) {
       // A storage policy error cannot stop the secure-mode redirect.
     }
+    root.LRS_PRIVATE_PAGE_REDIRECTED = true;
     try {
-      root.location.replace(new URL("./payroll-private.html", root.location.href).href);
+      root.location.replace(new URL("./private-dashboard.html", root.location.href).href);
     } catch (_) {
       // Keep the current page hidden rather than fall back to public data.
       if (root.document?.documentElement) root.document.documentElement.hidden = true;

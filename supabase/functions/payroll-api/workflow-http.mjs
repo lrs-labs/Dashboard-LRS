@@ -61,9 +61,10 @@ export function createPayrollWorkflowHandler(dependencies = {}) {
       if (snapshot.periodKey !== body.periodKey || snapshot.id !== body.snapshotId) return response(409, { error: "closed_snapshot_mismatch" });
       if (!snapshot.lines.some(line => line.technicianId === technicianId)) return response(404, { error: "technician_not_in_snapshot" });
 
-      const identities = await dependencies.identityResolver(snapshot.lines);
-      if (!Array.isArray(identities) || identities.length !== snapshot.lines.length ||
-          identities.some((item, index) => item?.state !== "verified" || item.assignmentId !== snapshot.lines[index].assignmentId)) {
+      const technicianLines = snapshot.lines.filter(line => line.technicianId === technicianId);
+      const identities = await dependencies.identityResolver(technicianLines);
+      if (!Array.isArray(identities) || identities.length !== technicianLines.length ||
+          identities.some((item, index) => item?.state !== "verified" || item.assignmentId !== technicianLines[index].assignmentId)) {
         return response(409, { error: "stable_assignment_identity_review_required" });
       }
       const freshSourceRevision = await dependencies.sourceReader.getRevision({ periodKey: body.periodKey });

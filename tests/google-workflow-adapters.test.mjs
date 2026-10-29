@@ -69,8 +69,8 @@ test("Drive replacement checks the current revision and preserves prior and new 
     }
     if (pathname === "/drive/v3/files/file-fixture") {
       fileReads++;
-      if (fileReads >= 3) return jsonResponse({ id: "file-fixture", mimeType: "application/pdf", parents: ["dir-tech"], headRevisionId: "revision-after", appProperties: { lrs_period_key: "2026-10-Q1", lrs_technician_id: "tech-fixture-1", lrs_snapshot_id: "snapshot-fixture-1", lrs_source_revision: "sheet-revision-fixture", lrs_pdf_sha256: createHash("sha256").update(PDF).digest("hex"), lrs_operation_key: "operation-fixture-2" } });
-      return jsonResponse({ id: "file-fixture", mimeType: "application/pdf", parents: ["dir-tech"], headRevisionId: "revision-before", appProperties: { lrs_period_key: "2026-10-Q1", lrs_technician_id: "tech-fixture-1" } });
+      if (fileReads >= 3) return jsonResponse({ id: "file-fixture", mimeType: "application/pdf", parents: ["dir-tech"], headRevisionId: "revision-after", appProperties: { lrs_period_key: "2026-10-Q1", lrs_technician_id: "tech-fixture-1", lrs_snapshot_id: "snapshot-fixture-1", lrs_source_revision: "sheet-revision-fixture", lrs_pdf_sha256: createHash("sha256").update(PDF).digest("hex"), lrs_operation_key: "operation-fixture-2" } }, 200, { etag: '"drive-etag-after"' });
+      return jsonResponse({ id: "file-fixture", mimeType: "application/pdf", parents: ["dir-tech"], headRevisionId: "revision-before", appProperties: { lrs_period_key: "2026-10-Q1", lrs_technician_id: "tech-fixture-1" } }, 200, { etag: '"drive-etag-before"' });
     }
     if (pathname === "/drive/v3/files/file-fixture/revisions/revision-before") return jsonResponse({ id: "revision-before", keepForever: true });
     if (pathname === "/upload/drive/v3/files/file-fixture") return jsonResponse({ id: "file-fixture", name: "Fixture.pdf" });
@@ -87,8 +87,49 @@ test("Drive replacement checks the current revision and preserves prior and new 
     metadata: { periodKey: "2026-10-Q1", technicianId: "tech-fixture-1", snapshotId: "snapshot-fixture-1", sourceRevision: "sheet-revision-fixture" } });
   assert.equal(replaced.fileId, "file-fixture");
   assert.equal(replaced.revisionId, "revision-after");
-  assert.equal(requests.filter(request => request.url.includes("/revisions/")).length, 2);
+  assert.equal(requests.filter(request => request.url.includes("/revisions/")).length, 4);
+  const patch = requests.find(request => request.url.includes("/upload/drive/"));
+  assert.equal(patch.options.headers["if-match"], '"drive-etag-before"');
   assert.equal(requests.filter(request => request.url.includes("/upload/drive/")).length, 1);
+});
+
+test("Drive replacement fails closed when the provider does not return a conditional ETag", async () => {
+  const adapter = createGoogleDriveInvoiceAdapter({ config: driveConfig, fetcher: async url => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname === "/drive/v3/files/file-fixture") return jsonResponse({ id: "file-fixture", mimeType: "application/pdf", parents: ["dir-tech"], headRevisionId: "revision-current", appProperties: {} });
+    throw new Error(`unexpected_fixture_request:${parsed.pathname}`);
+  } });
+  await assert.rejects(adapter.replacePreservingRevision({ fileId: "file-fixture", expectedRevisionId: "revision-current", content: PDF,
+    fileName: "Fixture.pdf", folderPath: "NOMINAS/2026/OCTUBRE/Fixture Tech", idempotencyKey: "operation-etag-missing",
+    metadata: { periodKey: "2026-10-Q1", technicianId: "tech-fixture-1", snapshotId: "snapshot-fixture-1", sourceRevision: "sheet-revision-fixture" } }),
+  /conditional_revision_unavailable/);
+});
+
+test("Drive archive does not report success when persisted revision retention cannot be verified", async () => {
+  let folderNo = 0, retentionReads = 0;
+  const fetcher = async (url, options = {}) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname === "/drive/v3/files" && options.method !== "POST") return jsonResponse({ files: [] });
+    if (parsed.pathname === "/drive/v3/files" && options.method === "POST") {
+      const body = JSON.parse(options.body);
+      return jsonResponse({ id: `folder-${++folderNo}`, name: body.name, mimeType: body.mimeType, parents: body.parents });
+    }
+    if (parsed.pathname === "/upload/drive/v3/files") return jsonResponse({ id: "drive-retention-fixture", name: "Fixture.pdf" });
+    if (parsed.pathname === "/drive/v3/files/drive-retention-fixture") return jsonResponse({ id: "drive-retention-fixture", name: "Fixture.pdf", mimeType: "application/pdf", headRevisionId: "revision-retention", version: "1", appProperties: { lrs_period_key: "2026-10-Q1", lrs_technician_id: "tech-fixture-1", lrs_snapshot_id: "snapshot-fixture-1", lrs_source_revision: "revision-source-1", lrs_pdf_sha256: createHash("sha256").update(PDF).digest("hex"), lrs_operation_key: "operation-retention-1" } });
+    if (parsed.pathname === "/drive/v3/files/drive-retention-fixture/revisions/revision-retention") {
+      if (options.method === "PATCH") return jsonResponse({ id: "revision-retention", keepForever: true });
+      retentionReads++;
+      return jsonResponse({ id: "revision-retention", keepForever: false });
+    }
+    throw new Error(`unexpected_fixture_request:${parsed.pathname}:${options.method}`);
+  };
+  const adapter = createGoogleDriveInvoiceAdapter({ config: driveConfig, fetcher });
+  await assert.rejects(adapter.createInvoice({ content: PDF, fileName: "Fixture.pdf", folderPath: "NOMINAS/2026/OCTUBRE/Fixture Tech",
+    idempotencyKey: "operation-retention-1", metadata: { periodKey: "2026-10-Q1", technicianId: "tech-fixture-1", snapshotId: "snapshot-fixture-1", sourceRevision: "revision-source-1" } }), error => {
+    assert.equal(error.outcomeUnknown, true);
+    return /retention_unverified/.test(error.message);
+  });
+  assert.equal(retentionReads, 1);
 });
 
 test("Gmail adapter sends only the verified target and exact PDF attachment; disabled mode makes no request", async () => {

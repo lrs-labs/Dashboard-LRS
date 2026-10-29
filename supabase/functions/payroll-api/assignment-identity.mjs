@@ -1,16 +1,10 @@
+import { sha256Hex } from "../../../stable-json.mjs";
+
 const ROLES = new Set(["TP", "TA1", "TA2"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function text(value) {
   return String(value ?? "").normalize("NFC").replace(/\s+/g, " ").trim();
-}
-
-async function sha256(value) {
-  const cryptoImpl = globalThis.crypto;
-  if (!cryptoImpl?.subtle?.digest) throw new TypeError("webcrypto_required");
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return [...digest].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function prepare(line) {
@@ -46,8 +40,21 @@ function prepare(line) {
   };
 }
 
-function resolved(assignmentId, identityKeyHash, sourceFingerprintHash) {
-  return { state: "verified", assignmentId, identityKeyHash, sourceFingerprintHash, reason: null };
+export async function calculateAssignmentHashes(line) {
+  const value = prepare(line);
+  if (!value.values) return value;
+  const identityKeyHash = await sha256Hex(value.values);
+  const sourceFingerprintHash = await sha256Hex({
+    ...value.values,
+    amount: value.amount,
+    status: value.status,
+    cancellationFee: value.cancellationFee
+  });
+  return { ...value, identityKeyHash, sourceFingerprintHash };
+}
+
+function resolved(assignmentId, identityKeyHash, sourceFingerprintHash, sheetMetadataId = null) {
+  return { state: "verified", assignmentId, identityKeyHash, sourceFingerprintHash, sheetMetadataId, reason: null };
 }
 
 function review(state, identityKeyHash, sourceFingerprintHash, reason) {
@@ -60,13 +67,7 @@ export async function resolveAssignmentIdentities(lines, { store, createId = () 
   }
   if (!Array.isArray(lines)) throw new TypeError("source_lines_required");
 
-  const prepared = await Promise.all(lines.map(async line => {
-    const value = prepare(line);
-    if (!value.values) return value;
-    const identityKeyHash = await sha256(value.values);
-    const sourceFingerprintHash = await sha256({ ...value.values, amount: value.amount, status: value.status, cancellationFee: value.cancellationFee });
-    return { ...value, identityKeyHash, sourceFingerprintHash };
-  }));
+  const prepared = await Promise.all(lines.map(calculateAssignmentHashes));
   const occurrences = new Map();
   for (const item of prepared) {
     if (item.identityKeyHash) occurrences.set(item.identityKeyHash, (occurrences.get(item.identityKeyHash) || 0) + 1);
@@ -82,7 +83,7 @@ export async function resolveAssignmentIdentities(lines, { store, createId = () 
     catch (_) { return review("needs_review", item.identityKeyHash, item.sourceFingerprintHash, "identity_store_unavailable"); }
     if (existing) {
       if (existing.state === "verified" && existing.sourceFingerprintHash === item.sourceFingerprintHash && UUID.test(existing.assignmentId || "")) {
-        return resolved(existing.assignmentId, item.identityKeyHash, item.sourceFingerprintHash);
+        return resolved(existing.assignmentId, item.identityKeyHash, item.sourceFingerprintHash, existing.sheetMetadataId ?? null);
       }
       const changed = existing.sourceFingerprintHash !== item.sourceFingerprintHash;
       if (!changed && existing.state === "pending_review") {
@@ -103,7 +104,7 @@ export async function resolveAssignmentIdentities(lines, { store, createId = () 
       if (inserted?.conflict === true) {
         const raced = await store.findByIdentityHash(item.identityKeyHash);
         if (raced?.state === "verified" && raced.sourceFingerprintHash === item.sourceFingerprintHash && UUID.test(raced.assignmentId || "")) {
-          return resolved(raced.assignmentId, item.identityKeyHash, item.sourceFingerprintHash);
+          return resolved(raced.assignmentId, item.identityKeyHash, item.sourceFingerprintHash, raced.sheetMetadataId ?? null);
         }
         return review("needs_review", item.identityKeyHash, item.sourceFingerprintHash, "concurrent_identity_review_required");
       }

@@ -77,7 +77,11 @@ export function createGoogleDriveInvoiceAdapter({ config = {}, fetcher = globalT
       throw providerError(response.status === 412 ? "drive_revision_conflict" : `google_drive_http_${response.status}`, uncertain);
     }
     if (response.status === 204) return {};
-    try { return await response.json(); }
+    try {
+      const value = await response.json();
+      const etag = response.headers?.get?.("etag");
+      return etag && value && typeof value === "object" && !Array.isArray(value) ? { ...value, _httpEtag: etag } : value;
+    }
     catch (_) { throw providerError("google_drive_response_invalid", outcomeUnknown); }
   }
   async function list(q) {
@@ -180,6 +184,10 @@ export function createGoogleDriveInvoiceAdapter({ config = {}, fetcher = globalT
     const path = `${DRIVE_API}/files/${encodeURIComponent(fileId)}/revisions/${encodeURIComponent(revisionId)}?fields=id,keepForever&supportsAllDrives=true`;
     const result = await request(path, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ keepForever: true }) });
     if (result.id !== revisionId || result.keepForever !== true) throw providerError("drive_revision_retention_unverified", true);
+    // A successful PATCH response is not enough to claim retention: read the
+    // immutable revision back and confirm Drive persisted keepForever.
+    const verified = await request(path, { method: "GET", outcomeUnknown: true });
+    if (verified.id !== revisionId || verified.keepForever !== true) throw providerError("drive_revision_retention_unverified", true);
   }
   async function createInvoice({ content, fileName, folderPath, idempotencyKey, metadata }) {
     const bytes = toBytes(content);
@@ -221,6 +229,7 @@ export function createGoogleDriveInvoiceAdapter({ config = {}, fetcher = globalT
     if (current?.id !== fileId || current.mimeType !== PDF_MIME || current.headRevisionId !== expectedRevisionId || current.trashed === true) {
       throw providerError("drive_revision_conflict");
     }
+    if (typeof current._httpEtag !== "string" || !current._httpEtag.trim()) throw providerError("drive_conditional_revision_unavailable");
     const props = identityProps(metadata);
     const oldIdentity = current.appProperties || {};
     if (oldIdentity.lrs_period_key && (oldIdentity.lrs_period_key !== props.lrs_period_key || oldIdentity.lrs_technician_id !== props.lrs_technician_id)) {
@@ -235,7 +244,7 @@ export function createGoogleDriveInvoiceAdapter({ config = {}, fetcher = globalT
     let uploaded;
     try {
       uploaded = await request(`${DRIVE_UPLOAD}/files/${encodeURIComponent(fileId)}?uploadType=multipart&fields=${encodeURIComponent(FILE_FIELDS)}&supportsAllDrives=true`, {
-        method: "PATCH", headers: { "content-type": `multipart/related; boundary=${multipart.boundary}` }, body: multipart.body, outcomeUnknown: true
+        method: "PATCH", headers: { "content-type": `multipart/related; boundary=${multipart.boundary}`, "if-match": current._httpEtag }, body: multipart.body, outcomeUnknown: true
       });
     } catch (error) { throw error; }
     try {

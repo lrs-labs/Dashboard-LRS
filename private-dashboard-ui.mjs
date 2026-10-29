@@ -1,8 +1,8 @@
 import { createSecureDashboardClient } from "./secure-dashboard-client.mjs";
-import { createPrivateAuthRuntime } from "./private-auth-runtime.mjs";
+import { loadPrivateAuthRuntime } from "./private-runtime-bootstrap.mjs";
 import { calculateHourlyComparison, filterDashboardRows, normalizeDashboardRows, parseSecureTabulator, summarizeDashboardRows } from "./private-dashboard-view.mjs";
 
-const runtime = createPrivateAuthRuntime(globalThis.LRS_PRIVATE_PAYROLL_RUNTIME || {});
+const runtime = await loadPrivateAuthRuntime();
 const $ = id => document.getElementById(id);
 const workspace = $("workspace");
 const accessMessage = $("accessMessage");

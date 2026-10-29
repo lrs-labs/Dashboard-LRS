@@ -14,7 +14,7 @@ const archived = {
 function snapshot(overrides = {}) {
   return {
     id: "snapshot-2026-10-Q1-v1", state: "closed", frozen: true, periodKey: "2026-10-Q1",
-    sourceRevision: "sheet-version-7", frozenAt: "2026-10-16T14:00:00-04:00",
+    sourceRevision: "sheet-version-7", closedAt: "2026-10-15T10:00:00-04:00", frozenAt: "2026-10-16T14:00:00-04:00", digest: "a".repeat(64),
     lines: [{ assignmentId: "assignment-1", technicianId: "tech-1", role: "TP", amount: 180, paidFlag: false }],
     ...overrides
   };
@@ -31,6 +31,12 @@ function fakeJobs() {
       if (row.job_type === "invoice_email" && [...rows.values()].some(existing => existing.job_type === "invoice_email" && existing.period_key === row.period_key && existing.technician_id === row.technician_id && ["queued", "running", "unknown", "needs_review"].includes(existing.state))) return false;
       if (rows.has(row.idempotency_key)) return false;
       rows.set(row.idempotency_key, { ...row, state: "queued" });
+      return true;
+    },
+    async claimExpiredQueued(key, input) {
+      const row = rows.get(key);
+      if (!row || row.state !== "queued" || row.lease_expires_at !== input.expectedLeaseExpiresAt || Date.parse(row.lease_expires_at) > Date.now()) return false;
+      rows.set(key, { ...row, state: "running", started_at: input.startedAt, lease_expires_at: input.leaseExpiresAt });
       return true;
     },
     async transition(key, state, patch = {}) { rows.set(key, { ...rows.get(key), ...patch, state }); }
@@ -76,6 +82,30 @@ test("invoice regeneration keeps the Drive file identity and requires a fresh ma
   assert.equal(result.result.replaced, true);
   assert.equal(replaces[0].expectedRevisionId, "rev-old");
   await assert.rejects(archiveClosedInvoice({ snapshot: snapshot(), technicianId: "tech-1", technicianName: "Fixture Tech", pdfBytes: pdf, freshSourceRevision: "changed-after-close", drive, jobs: fakeJobs(), audit: fakeAudit() }), /source_changed_since_snapshot_review_required/);
+});
+
+test("expired queued jobs can be recovered because no provider effect began before the running transition", async () => {
+  const rawSnapshot = snapshot();
+  const identity = { jobType: "invoice_drive", periodKey: rawSnapshot.periodKey, technicianId: "tech-1", version: rawSnapshot.sourceRevision };
+  const key = await makeWorkflowIdempotencyKey(identity);
+  const pdfSha256 = createHash("sha256").update(pdf).digest("hex");
+  const payload = { ...identity, snapshotId: rawSnapshot.id, pdfSha256 };
+  const requestDigest = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+  const jobs = fakeJobs();
+  jobs.rows.set(key, { idempotency_key: key, job_type: "invoice_drive", period_key: rawSnapshot.periodKey,
+    technician_id: "tech-1", request_digest: requestDigest, state: "queued", lease_expires_at: "2000-01-01T00:00:00.000Z" });
+  let creates = 0;
+  const drive = { async findCurrentInvoice() { return null; }, async createInvoice() { creates++; return { fileId: "recovered-file", revisionId: "recovered-rev" }; } };
+  const first = await archiveClosedInvoice({ snapshot: rawSnapshot, technicianId: "tech-1", technicianName: "Fixture Tech", pdfBytes: pdf,
+    freshSourceRevision: rawSnapshot.sourceRevision, drive, jobs, audit: fakeAudit() });
+  assert.equal(first.state, "succeeded");
+  assert.equal(first.result.fileId, "recovered-file");
+  assert.equal(creates, 1);
+  const replay = await archiveClosedInvoice({ snapshot: rawSnapshot, technicianId: "tech-1", technicianName: "Fixture Tech", pdfBytes: pdf,
+    freshSourceRevision: rawSnapshot.sourceRevision, drive, jobs, audit: fakeAudit() });
+  assert.equal(replay.replay, true);
+  assert.equal(replay.result.fileId, "recovered-file");
+  assert.equal(creates, 1);
 });
 
 test("invoice archive refuses open snapshots, unsafe PDF input and technicians outside the frozen snapshot", async () => {
@@ -347,8 +377,8 @@ test("calendar adapter writes only positive, pending, stable assignments on exac
     { assignmentId: "a-2", technicianId: "tech-1", role: "TA1", amount: 130, paidFlag: true },
     { assignmentId: "a-3", technicianId: "tech-1", role: "TA2", amount: 0, paidFlag: false }
   ] });
-  const writer = { async setPaidFlagByStableAssignmentId(input) { writes.push(input); return { updated: true }; } };
-  const now = new Date("2026-10-18T13:00:00.000Z");
+  const writer = { async preflightClosedSnapshot() { return { state: "ready" }; }, async setPaidFlagByStableAssignmentId(input) { writes.push(input); return { updated: true }; } };
+  const now = new Date("2026-10-18T15:00:00.000Z");
   const result = await executeScheduledAdministrativeMarks({ snapshot: data, now, writer, jobs, audit });
   assert.equal(result.state, "succeeded");
   assert.equal(result.changed, 1);
@@ -364,7 +394,7 @@ test("calendar adapter writes only positive, pending, stable assignments on exac
 
 test("calendar adapter never marks early, late, unknown, retroactive or unstable work", async () => {
   let writes = 0;
-  const writer = { async setPaidFlagByStableAssignmentId() { writes++; return { updated: true }; } };
+  const writer = { async preflightClosedSnapshot() { return { state: "ready" }; }, async setPaidFlagByStableAssignmentId() { writes++; return { updated: true }; } };
   const base = { writer, jobs: fakeJobs(), audit: fakeAudit() };
   const early = await executeScheduledAdministrativeMarks({ ...base, snapshot: snapshot(), now: new Date("2026-10-17T15:00:00Z") });
   assert.equal(early.state, "not_due");

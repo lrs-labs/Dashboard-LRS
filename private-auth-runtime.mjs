@@ -8,6 +8,17 @@ function disabled(reason) {
   return Object.freeze({ config: { enabled: false }, authClient: null, sessionStorage: null, reason });
 }
 
+export function isSupabasePublishableKey(value) {
+  if (typeof value !== "string" || value.length < 20 || value.length > 4096 || /\s/.test(value)) return false;
+  if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(value)) return true;
+  const parts = value.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const payload = JSON.parse(globalThis.atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload?.role === "anon";
+  } catch (_) { return false; }
+}
+
 /**
  * Builds Supabase Auth with per-tab session storage. The caller supplies the
  * SDK factory and private runtime configuration at deployment time; neither
@@ -18,7 +29,7 @@ export function createPrivateAuthRuntime(input = {}, { getOrigin = () => globalT
   const createClient = input?.createClient;
   const storage = input && Object.hasOwn(input, "sessionStorage") ? input.sessionStorage : browserSessionStorage();
   if (!config || config.enabled !== true) return disabled("unconfigured");
-  if (typeof config.supabaseUrl !== "string" || typeof config.publishableKey !== "string" || !config.publishableKey.trim() ||
+  if (typeof config.supabaseUrl !== "string" || !isSupabasePublishableKey(config.publishableKey) ||
       typeof config.allowedOrigin !== "string" || !/^https:\/\//.test(config.allowedOrigin)) return disabled("runtime_config_invalid");
   try {
     const url = new URL(config.supabaseUrl);

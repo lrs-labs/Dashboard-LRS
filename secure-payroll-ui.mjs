@@ -1,9 +1,9 @@
 import { createSecurePayrollClient } from "./secure-payroll-client.mjs";
-import { createPrivateAuthRuntime } from "./private-auth-runtime.mjs";
+import { loadPrivateAuthRuntime } from "./private-runtime-bootstrap.mjs";
 import { buildPayrollInvoice, filterPayrollLines, getPayrollPeriodOptions } from "./payroll-private-view.mjs";
 import { generatePayrollInvoicePdf } from "./payroll-invoice-pdf.mjs";
 
-const runtime = createPrivateAuthRuntime(globalThis.LRS_PRIVATE_PAYROLL_RUNTIME || {});
+const runtime = await loadPrivateAuthRuntime();
 const $ = id => document.getElementById(id);
 const signInButton = $("signIn");
 const refreshButton = $("refresh");

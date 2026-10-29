@@ -1,2 +1,5 @@
 [functions.payroll-api]
 verify_jwt = true
+
+[functions.payroll-calendar-worker]
+verify_jwt = true

@@ -15,8 +15,9 @@ test("all-scope payroll reader may continue only with an explicit active permiss
   assert.deepEqual(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "all" }), { ok: true, scope: "all" });
 });
 
-test("selected scope is blocked until stable technician IDs are mapped to source slots", () => {
-  assert.equal(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "selected", technician_ids: ["tech-1"] }).reason, "stable_technician_mapping_required");
+test("selected payroll scope is passed to the server projection for stable-ID slot filtering", () => {
+  assert.deepEqual(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "selected", technician_ids: ["tech-1", "tech-1"] }),
+    { ok: true, scope: "selected", technicianIds: ["tech-1"] });
   assert.equal(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "selected", technician_ids: [] }).reason, "scope_not_configured");
   assert.equal(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "none" }).reason, "scope_not_configured");
 });

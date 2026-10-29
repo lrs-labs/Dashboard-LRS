@@ -50,6 +50,15 @@ export function createSupabaseWorkflowStore(supabaseAdmin) {
       });
       if (changed !== true) throw new Error("workflow_transition_conflict");
       return true;
+    },
+    async claimExpiredQueued(idempotencyKey, { expectedLeaseExpiresAt, startedAt, leaseExpiresAt } = {}) {
+      const claimed = await call("lrs_workflow_job_claim_expired_queued", {
+        p_idempotency_key: idempotencyKey,
+        p_expected_lease_expires_at: expectedLeaseExpiresAt,
+        p_started_at: startedAt,
+        p_lease_expires_at: leaseExpiresAt
+      });
+      return claimed === true;
     }
   });
 

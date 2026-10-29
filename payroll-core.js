@@ -51,12 +51,18 @@
   }
 
   function parseAmount(value) {
-    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
     const raw = text(value);
-    if (!raw) return 0;
-    const negative = /^\(.*\)$/.test(raw);
-    const n = Number.parseFloat(raw.replace(/[,$\s()]/g, ""));
-    if (!Number.isFinite(n)) return 0;
+    if (!raw) return null;
+    const negative = /^\(\s*\$?\s*[^()]+\s*\)$/.test(raw);
+    const wrapped = negative ? raw.slice(1, -1).trim() : raw;
+    const currencyStripped = wrapped.replace(/^\$\s*/, "").trim();
+    // Accept US-style grouped thousands only; deleting arbitrary commas or
+    // whitespace would turn malformed source cells (e.g. "1,2,3") into money.
+    if (!/^[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)$/.test(currencyStripped)) return null;
+    const cleaned = currencyStripped.replace(/,/g, "");
+    const n = Number(cleaned);
+    if (!Number.isFinite(n)) return null;
     return negative ? -Math.abs(n) : n;
   }
 
@@ -469,7 +475,7 @@
     const reviewRows = [];
     let excludedStatus = 0;
 
-    (Array.isArray(rows) ? rows : []).forEach((source, index) => {
+    (Array.isArray(rows) ? rows : []).forEach(source => {
       const row = source || {};
       const date = parseDate(row.date);
       const year = date ? Number(date.slice(0, 4)) : null;
@@ -482,11 +488,18 @@
         role,
         technician: cleanTechnician(row[key]),
         amount: parseAmount(row[`amount${key.toUpperCase()}`]),
+        amountPresent: text(row[`amount${key.toUpperCase()}`]) !== "",
         paidState: paidState(row[`paid${key.toUpperCase()}`])
       }));
       const hasSupportedCancellationFee = status === "CANCELED" && category === "NEW" && slots.some(slot => slot.amount > 0);
+      const ambiguousCancellationFee = status === "CANCELED" && category === "NEW" &&
+        slots.some(slot => slot.technician && slot.amount === null);
       const eligibleStatus = status === "COMPLETED" || status === "REALIZADO" || hasSupportedCancellationFee;
 
+      if (ambiguousCancellationFee) {
+        reviewRows.push({ date, period: text(row.period), status, reason: "invalid-cancellation-fee-amount" });
+        return;
+      }
       if (!eligibleStatus) {
         excludedStatus++;
         return;
@@ -517,17 +530,24 @@
       slots.forEach(slot => {
         if (hasSupportedCancellationFee && slot.amount <= 0) return;
         if (!slot.technician) {
-          if (slot.amount !== 0) unassigned.push({ ...rowInfo, role: slot.role, amount: slot.amount });
+          if (slot.amount > 0 || (slot.amount === null && slot.amountPresent)) {
+            unassigned.push({ ...rowInfo, role: slot.role, amount: slot.amount, amountInvalid: slot.amount === null });
+          }
           return;
         }
         lines.push({
           ...rowInfo,
-          id: `${index}-${slot.key}`,
           role: slot.role,
           technician: slot.technician,
           amount: slot.amount,
-          paidState: slot.amount === 0 ? "zero" : slot.paidState,
-          paid: slot.amount !== 0 && slot.paidState === "paid"
+          amountInvalid: slot.amount === null,
+          paidState: slot.amount === null ? "review" : slot.amount === 0 ? "zero" : slot.paidState,
+          paid: slot.amount != null && slot.amount !== 0 && slot.paidState === "paid",
+          ...(text(row.assignmentIds && row.assignmentIds[slot.role]) ? { assignmentId: text(row.assignmentIds[slot.role]) } : {}),
+          ...(text(row.assignmentTechnicianIds && row.assignmentTechnicianIds[slot.role]) ? { technicianId: text(row.assignmentTechnicianIds[slot.role]) } : {}),
+          ...(Number.isSafeInteger(row.assignmentSheetMetadataIds && row.assignmentSheetMetadataIds[slot.role]) ? { sheetMetadataId: row.assignmentSheetMetadataIds[slot.role] } : {}),
+          ...(text(row.assignmentIdentityStates && row.assignmentIdentityStates[slot.role]) ? { identityState: text(row.assignmentIdentityStates[slot.role]) } : {}),
+          ...(text(row.assignmentFingerprints && row.assignmentFingerprints[slot.role]) ? { sourceFingerprintHash: text(row.assignmentFingerprints[slot.role]) } : {})
         });
       });
     });
@@ -568,31 +588,40 @@
         paid: 0,
         pending: 0,
         review: 0,
+        amountReview: 0,
         lineCount: 0,
         projects: new Set(),
         reportPending: 0
       });
       const summary = summaries.get(key);
-      summary.total += line.amount;
+      const amountValid = typeof line.amount === "number" && Number.isFinite(line.amount);
+      if (amountValid) summary.total += line.amount;
+      else summary.amountReview++;
       summary.lineCount++;
       summary.projects.add(`${line.date}|${line.project}|${line.activity}|${line.caseName}`);
-      if (line.paidState === "paid") summary.paid += line.amount;
-      else if (line.paidState === "unpaid") summary.pending += line.amount;
-      else if (line.paidState === "review") summary.review += line.amount;
+      if (line.paidState === "paid" && amountValid) summary.paid += line.amount;
+      else if (line.paidState === "unpaid" && amountValid) summary.pending += line.amount;
+      else if (line.paidState === "review") summary.review += amountValid ? line.amount : 0;
       if (line.reportPending) summary.reportPending++;
     });
-    return [...summaries.values()].map(summary => ({
-      ...summary,
-      projects: summary.projects.size,
-      balance: summary.review > 0 ? null : summary.total - summary.paid
-    }))
+    return [...summaries.values()].map(summary => {
+      const knownTotal = summary.total;
+      return {
+        ...summary,
+        total: summary.amountReview > 0 ? null : knownTotal,
+        knownTotal,
+        projects: summary.projects.size,
+        balance: summary.review > 0 || summary.amountReview > 0 ? null : knownTotal - summary.paid
+      };
+    })
       .sort((a, b) => a.technician.localeCompare(b.technician, "es"));
   }
 
   function folio(technician, year, month, half, lines) {
     const canonical = (Array.isArray(lines) ? lines : []).map(line => [
       line.date, line.project, line.activity, line.caseName, line.role,
-      Number(line.amount), line.paidState, line.jobStatus, line.reportPending ? 1 : 0
+      typeof line.amount === "number" && Number.isFinite(line.amount) ? line.amount : "UNKNOWN",
+      line.paidState, line.jobStatus, line.reportPending ? 1 : 0
     ]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     const payload = JSON.stringify([technician, year, month, half, canonical]);
     let hash = 2166136261;

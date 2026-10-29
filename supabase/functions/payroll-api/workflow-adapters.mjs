@@ -50,7 +50,7 @@ async function executeIdempotent({ jobs, audit, key, type, periodKey, identityRe
   requireAdapter(jobs, "transition");
   requireAdapter(audit, "record");
   const digest = await digestPayload(payload);
-  const prior = await jobs.get(key);
+  let prior = await jobs.get(key);
   const decision = classifyWorkflowAttempt({ idempotencyKey: key, jobType: type, requestDigest: digest, existing: prior });
   const auditEvent = { idempotencyKey: key, origin, actorId, action: type, entityType: type, entityRef: identityRef, periodKey, outcome: "succeeded" };
   if (decision.decision === "return_existing_result") {
@@ -58,40 +58,71 @@ async function executeIdempotent({ jobs, audit, key, type, periodKey, identityRe
     try { await audit.record(auditEvent); } catch (_) { auditPending = true; }
     return { state: "succeeded", result: prior.result_payload ?? null, replay: true, auditPending };
   }
-  if (decision.decision !== "enqueue") {
-    const state = ["running", "unknown", "needs_review"].includes(prior?.state)
-      ? "reconcile_required"
-      : decision.state || decision.decision;
-    return { state, reason: decision.reason || null, replay: true };
+  if (prior && ["conflict", "reject"].includes(decision.decision)) {
+    return { state: decision.state || "conflict", reason: decision.reason || "idempotency_conflict", replay: true };
   }
-  const leaseExpiresAt = new Date(new Date(now).getTime() + 120_000).toISOString();
-  const inserted = await jobs.insertQueued({
-    idempotency_key: key, job_type: type, period_key: periodKey, request_digest: digest,
-    technician_id: payload.technicianId || null,
-    source_snapshot_ref: payload.snapshotId || null,
-    requested_by: actorId, lease_expires_at: leaseExpiresAt
-  });
-  if (!inserted) {
-    const raced = await jobs.get(key);
-    if (!raced && type === "invoice_email" && typeof jobs.findUnresolvedEmail === "function") {
-      const unresolved = await jobs.findUnresolvedEmail({ periodKey, technicianId: payload.technicianId });
-      if (Array.isArray(unresolved) && unresolved.length) {
-        return { state: "reconcile_required", reason: "previous_email_outcome_unresolved", replay: true };
+  let claimed = false;
+  if (prior) {
+    if (prior.state === "queued") {
+      const leaseMs = Date.parse(prior.lease_expires_at || "");
+      const nowMs = new Date(now).getTime();
+      if (!Number.isFinite(leaseMs) || leaseMs > nowMs || typeof jobs.claimExpiredQueued !== "function") {
+        return { state: "queued", reason: "job_lease_active_or_unavailable", replay: true };
       }
+      const startedAt = new Date(nowMs).toISOString();
+      const leaseExpiresAt = new Date(nowMs + 120_000).toISOString();
+      try { claimed = await jobs.claimExpiredQueued(key, { expectedLeaseExpiresAt: prior.lease_expires_at, startedAt, leaseExpiresAt }); }
+      catch (_) { return { state: "reconcile_required", reason: "expired_queue_claim_unavailable", replay: true }; }
+      if (!claimed) {
+        const raced = await jobs.get(key);
+        return { state: raced?.state === "running" ? "reconcile_required" : raced?.state || "queued", reason: "expired_queue_claim_conflict", replay: true };
+      }
+    } else if (decision.decision !== "enqueue") {
+      const state = ["running", "unknown", "needs_review"].includes(prior.state)
+        ? "reconcile_required"
+        : decision.state || decision.decision;
+      return { state, reason: decision.reason || null, replay: true };
     }
-    const afterRace = classifyWorkflowAttempt({ idempotencyKey: key, jobType: type, requestDigest: digest, existing: raced });
-    return { state: raced?.state === "running" ? "reconcile_required" : afterRace.state || afterRace.decision, reason: afterRace.reason || "concurrent_job", replay: true };
   }
-  try {
-    await jobs.transition(key, "running", { started_at: new Date(now).toISOString(), lease_expires_at: leaseExpiresAt }, { expectedState: "queued" });
-  } catch (_) {
-    return { state: "queued", reason: "job_start_persistence_failed", idempotencyKey: key };
+
+  if (!prior) {
+    const leaseExpiresAt = new Date(new Date(now).getTime() + 120_000).toISOString();
+    const inserted = await jobs.insertQueued({
+      idempotency_key: key, job_type: type, period_key: periodKey, request_digest: digest,
+      technician_id: payload.technicianId || null,
+      source_snapshot_ref: payload.snapshotId || null,
+      requested_by: actorId, lease_expires_at: leaseExpiresAt
+    });
+    if (!inserted) {
+      const raced = await jobs.get(key);
+      if (!raced && type === "invoice_email" && typeof jobs.findUnresolvedEmail === "function") {
+        const unresolved = await jobs.findUnresolvedEmail({ periodKey, technicianId: payload.technicianId });
+        if (Array.isArray(unresolved) && unresolved.length) return { state: "reconcile_required", reason: "previous_email_outcome_unresolved", replay: true };
+      }
+      const afterRace = classifyWorkflowAttempt({ idempotencyKey: key, jobType: type, requestDigest: digest, existing: raced });
+      return { state: raced?.state === "running" ? "reconcile_required" : afterRace.state || afterRace.decision, reason: afterRace.reason || "concurrent_job", replay: true };
+    }
+    const startedAt = new Date(now).toISOString();
+    try {
+      await jobs.transition(key, "running", { started_at: startedAt, lease_expires_at: leaseExpiresAt }, { expectedState: "queued" });
+      claimed = true;
+    } catch (_) {
+      // The transition response may be lost after the database committed. This
+      // invocation created the queued record and is the only claimant before
+      // the lease expires, so a matching running row is safe to continue.
+      try {
+        prior = await jobs.get(key);
+        claimed = prior?.state === "running" && prior.started_at === startedAt;
+      } catch (_) { claimed = false; }
+      if (!claimed) return { state: prior?.state === "running" ? "reconcile_required" : "queued", reason: "job_start_persistence_uncertain", idempotencyKey: key };
+    }
   }
+  if (!claimed) return { state: "reconcile_required", reason: "job_claim_not_confirmed", idempotencyKey: key };
   let result;
   try {
     result = await execute();
   } catch (error) {
-    const state = error?.outcomeUnknown === true ? "unknown" : "failed";
+    const state = error?.outcomeUnknown === true ? "unknown" : error?.reviewRequired === true ? "needs_review" : "failed";
     try { await jobs.transition(key, state, { result_code: state, completed_at: new Date(now).toISOString() }, { expectedState: "running" }); } catch (_) { /* A running job is reconciled; it is never retried automatically. */ }
     try { await audit.record({ ...auditEvent, outcome: state }); } catch (_) { /* Audit repair is separate from provider retry. */ }
     return { state, reason: "operation_failed", idempotencyKey: key };
@@ -298,8 +329,17 @@ export async function executeScheduledAdministrativeMarks({ snapshot: rawSnapsho
   const dueDate = scheduledAdministrativeMarkDate(snapshot.periodKey);
   if (newYorkDate(now) !== dueDate) return { state: "not_due", dueDate, changed: 0 };
   if (newYorkDate(new Date(snapshot.frozenAt)) > dueDate) return { state: "needs_review", reason: "snapshot_closed_after_due_date", changed: 0 };
+  const closedMs = Date.parse(snapshot.closedAt || "");
+  const nowMs = new Date(now).getTime();
+  if (!Number.isFinite(closedMs) || !Number.isFinite(nowMs)) return { state: "needs_review", reason: "snapshot_close_time_missing", changed: 0 };
+  if (nowMs < closedMs + 72 * 60 * 60 * 1000) return { state: "needs_review", reason: "finance_review_window_open", changed: 0 };
   const changes = snapshot.lines.filter(line => line.amount > 0);
   if (changes.some(line => typeof line.paidFlag !== "boolean")) return { state: "needs_review", reason: "payment_flag_unknown", changed: 0 };
+  requireAdapter(writer, "preflightClosedSnapshot");
+  let preflight;
+  try { preflight = await writer.preflightClosedSnapshot({ snapshot }); }
+  catch (_) { return { state: "needs_review", reason: "sheet_preflight_failed", changed: 0 }; }
+  if (preflight?.state !== "ready") return { state: "needs_review", reason: preflight?.reason || "sheet_preflight_failed", changed: 0 };
   let changed = 0;
   const results = [];
   for (const line of changes) {
@@ -313,9 +353,13 @@ export async function executeScheduledAdministrativeMarks({ snapshot: rawSnapsho
       execute: async () => {
         const written = await writer.setPaidFlagByStableAssignmentId({
           assignmentId: line.assignmentId, role: line.role, expectedPaidFlag: false, paidFlag: true,
-          snapshotId: snapshot.id, sourceRevision: snapshot.sourceRevision, dueDate, idempotencyKey: key
+          technicianId: line.technicianId, sheetMetadataId: line.sheetMetadataId,
+          sourceFingerprintHash: line.sourceFingerprintHash, amount: line.amount, periodKey: line.periodKey,
+          snapshotId: snapshot.id, sourceRevision: snapshot.sourceRevision, dueDate, idempotencyKey: key,
+          origin: "automatic-calendar-policy"
         });
         if (written?.outcomeUnknown === true) { const error = new Error("sheet_write_unverified"); error.outcomeUnknown = true; throw error; }
+        if (written?.conflict === true) { const error = new Error("sheet_manual_conflict"); error.reviewRequired = true; throw error; }
         if (written?.updated !== true) throw new Error("sheet_write_not_applied");
         return { assignmentId: line.assignmentId, role: line.role, origin: "automatic-calendar-policy" };
       }

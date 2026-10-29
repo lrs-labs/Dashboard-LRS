@@ -104,6 +104,16 @@ test("preserva roles duplicados legítimos y cada monto registrado en su slot", 
   assert.equal(Payroll.summarize(result.lines)[0].total, 455);
 });
 
+test("a source row position is never exposed as a stable assignment ID", () => {
+  const alone = Payroll.buildAssignments([row()]).lines[0];
+  const afterInsertedRow = Payroll.buildAssignments([row({ client: "Other Fixture Client" }), row()]).lines
+    .find(line => line.client === "Fixture Client A");
+  assert.equal(alone.id, undefined);
+  assert.equal(afterInsertedRow.id, undefined);
+  assert.equal(alone.assignmentId, undefined);
+  assert.equal(afterInsertedRow.assignmentId, undefined);
+});
+
 test("lee pagos por slot, mantiene ceros en cero y no inventa importes para slots vacíos", () => {
   const result = Payroll.buildAssignments([
     row({ amountTP: 0, paidTP: true, amountTA1: 120, paidTA1: true }),
@@ -117,6 +127,37 @@ test("lee pagos por slot, mantiene ceros en cero y no inventa importes para slot
   assert.equal(result.unassigned.length, 0);
   assert.equal(Payroll.summarize(result.lines).find(summary => summary.technician === "Technician A").total, 999);
   assert.equal(Payroll.summarize(result.lines).find(summary => summary.technician === "Technician B").total, 120);
+});
+
+test("invalid amount stays unknown, blocks conclusive totals, and zero remains a valid zero", () => {
+  assert.equal(Payroll.parseAmount(0), 0);
+  assert.equal(Payroll.parseAmount("$0.00"), 0);
+  assert.equal(Payroll.parseAmount("$1,234.50"), 1234.5);
+  assert.equal(Payroll.parseAmount("($ 1,234.50)"), -1234.5);
+  for (const invalid of ["not a price", "100oops", "12.50USD", "1,2,3", "1,23", "1 2", "1.2.3", "Infinity", Number.NaN, Number.POSITIVE_INFINITY, ""]) {
+    assert.equal(Payroll.parseAmount(invalid), null, `invalid amount ${String(invalid)} must remain unknown`);
+  }
+  const model = Payroll.buildAssignments([
+    row({ amountTP: "—", amountTA1: 0, ta1: "Technician B" }),
+    row({ amountTP: 0, tp: "Technician C", amountTA1: 0 })
+  ]);
+  const unknown = model.lines.find(line => line.technician === "Technician A");
+  assert.equal(unknown.amount, null);
+  assert.equal(unknown.amountInvalid, true);
+  assert.equal(unknown.paidState, "review");
+  assert.equal(model.lines.find(line => line.technician === "Technician C").paidState, "zero");
+  const summary = Payroll.summarize([unknown])[0];
+  assert.equal(summary.total, null);
+  assert.equal(summary.knownTotal, 0);
+  assert.equal(summary.amountReview, 1);
+  assert.equal(summary.balance, null);
+});
+
+test("a canceled NEW fee with an unknown amount is routed to review, not silently excluded", () => {
+  const model = Payroll.buildAssignments([row({ status: "CANCELED", category: "NEW", amountTP: "?", amountTA1: 0 })]);
+  assert.equal(model.lines.length, 0);
+  assert.equal(model.reviewRows[0].reason, "invalid-cancellation-fee-amount");
+  assert.equal(model.excludedStatus, 0);
 });
 
 test("mantiene saldo sin asignar fuera de técnicos e identifica pagos por revisar", () => {
