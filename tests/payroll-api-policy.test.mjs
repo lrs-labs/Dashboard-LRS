@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { authorizePayrollRead, dateOnly, mapPayrollRanges } from "../supabase/functions/payroll-api/policy.mjs";
+import { authorizePayrollRead, dateOnly, isAllowedOrigin, mapPayrollRanges } from "../supabase/functions/payroll-api/policy.mjs";
 const require = createRequire(import.meta.url);
 const PayrollCore = require("../payroll-core.js");
 
@@ -19,6 +19,14 @@ test("selected scope is blocked until stable technician IDs are mapped to source
   assert.equal(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "selected", technician_ids: ["tech-1"] }).reason, "stable_technician_mapping_required");
   assert.equal(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "selected", technician_ids: [] }).reason, "scope_not_configured");
   assert.equal(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "none" }).reason, "scope_not_configured");
+});
+
+test("request origin requires an explicit exact HTTPS runtime allowlist", () => {
+  assert.equal(isAllowedOrigin("", "https://lrs.kpwr.dev"), false);
+  assert.equal(isAllowedOrigin(undefined, "https://lrs.kpwr.dev"), false);
+  assert.equal(isAllowedOrigin("http://lrs.kpwr.dev", "http://lrs.kpwr.dev"), false);
+  assert.equal(isAllowedOrigin("https://lrs.kpwr.dev", "https://attacker.example"), false);
+  assert.equal(isAllowedOrigin("https://lrs.kpwr.dev", "https://lrs.kpwr.dev"), true);
 });
 
 test("Sheets serial dates and supported date strings are normalized", () => {
