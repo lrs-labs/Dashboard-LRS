@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { authorizePayrollRead, dateOnly, isAllowedOrigin, mapPayrollRanges } from "../supabase/functions/payroll-api/policy.mjs";
+import { authorizeDashboardRead, authorizePayrollRead, dashboardToLegacyPayload, dateOnly, isAllowedOrigin, mapDashboardRanges, mapPayrollRanges } from "../supabase/functions/payroll-api/policy.mjs";
 const require = createRequire(import.meta.url);
 const PayrollCore = require("../payroll-core.js");
 
@@ -21,12 +21,19 @@ test("selected scope is blocked until stable technician IDs are mapped to source
   assert.equal(authorizePayrollRead({ is_active: true, can_view_payroll: true, scope_mode: "none" }).reason, "scope_not_configured");
 });
 
+test("dashboard requires its own capability and denies selected technician scope before reading", () => {
+  assert.equal(authorizeDashboardRead(null).reason, "not_authorized");
+  assert.equal(authorizeDashboardRead({ is_active: true, can_view_dashboard: false, scope_mode: "all" }).reason, "not_authorized");
+  assert.deepEqual(authorizeDashboardRead({ is_active: true, can_view_dashboard: true, scope_mode: "all" }), { ok: true, scope: "all" });
+  assert.equal(authorizeDashboardRead({ is_active: true, can_view_dashboard: true, scope_mode: "selected", technician_ids: ["tech-1"] }).reason, "stable_technician_mapping_required");
+});
+
 test("request origin requires an explicit exact HTTPS runtime allowlist", () => {
-  assert.equal(isAllowedOrigin("", "https://lrs.kpwr.dev"), false);
-  assert.equal(isAllowedOrigin(undefined, "https://lrs.kpwr.dev"), false);
-  assert.equal(isAllowedOrigin("http://lrs.kpwr.dev", "http://lrs.kpwr.dev"), false);
-  assert.equal(isAllowedOrigin("https://lrs.kpwr.dev", "https://attacker.example"), false);
-  assert.equal(isAllowedOrigin("https://lrs.kpwr.dev", "https://lrs.kpwr.dev"), true);
+  assert.equal(isAllowedOrigin("", "https://dashboard.example.test"), false);
+  assert.equal(isAllowedOrigin(undefined, "https://dashboard.example.test"), false);
+  assert.equal(isAllowedOrigin("http://dashboard.example.test", "http://dashboard.example.test"), false);
+  assert.equal(isAllowedOrigin("https://dashboard.example.test", "https://attacker.example"), false);
+  assert.equal(isAllowedOrigin("https://dashboard.example.test", "https://dashboard.example.test"), true);
 });
 
 test("Sheets serial dates and supported date strings are normalized", () => {
@@ -90,4 +97,40 @@ test("private API projection preserves EXTERNO payroll and marks missing payment
   assert.equal(model.lines[0].paidState, "review");
   assert.equal(model.lines[0].jobStatus, "REALIZADO");
   assert.equal(model.lines[0].reportPending, true);
+});
+
+test("dashboard projection maps only the source fields used by dashboard, tabulator and calculators", () => {
+  const mapped = mapDashboardRanges([
+    { range: "REGISTRO_CASOS!B3:B", values: [[46307]] },
+    { range: "REGISTRO_CASOS!F3:H", values: [["1RA QUINCENA", "NEW", "Fixture client"]] },
+    { range: "REGISTRO_CASOS!I3:I", values: [["Fixture address"]] },
+    { range: "REGISTRO_CASOS!J3:K", values: [["MITIGATION", "KITCHEN"]] },
+    { range: "REGISTRO_CASOS!L3:O", values: [["Fixture insurer", "YES", "NO", 25]] },
+    { range: "REGISTRO_CASOS!P3:P", values: [["COMPLETED"]] },
+    { range: "REGISTRO_CASOS!Q3:S", values: [["Fixture note", "PENDING", 46308]] },
+    { range: "REGISTRO_CASOS!U3:W", values: [["Fixture TP", "Fixture TA1", ""]] },
+    { range: "REGISTRO_CASOS!X3:AA", values: [[180, 130, 0, 25]] },
+    { range: "REGISTRO_CASOS!AE3:AE", values: [[335]] },
+    { range: "REGISTRO_CASOS!AI3:AN", values: [["SI", 46309, 8, 2, 5, "75F"]] },
+    { range: "REGISTRO_CASOS!AU3:AU", values: [[4.5]] }
+  ], [[0, 0, "FLOOD"], [1, 0, "$180"]]);
+  assert.equal(mapped.rows.length, 1);
+  assert.equal(mapped.rows[0].address, "Fixture address");
+  assert.equal(mapped.rows[0].returnDate, "2026-10-13");
+  assert.equal(mapped.rows[0].quality, 4.5);
+  assert.equal(mapped.rows[0].amountPRV, 25);
+  assert.equal("paidTP" in mapped.rows[0], false);
+  assert.deepEqual(mapped.tabCells, [[0, 0, "FLOOD"], [1, 0, "$180"]]);
+  const legacy = dashboardToLegacyPayload({ schema: 1, rows: mapped.rows, tabCells: mapped.tabCells, readAt: "fixture-read" });
+  assert.equal(legacy.rows[0].length, 30);
+  assert.equal(legacy.rows[0][4], "Fixture address");
+  assert.equal(legacy.rows[0][29], 4.5);
+  assert.deepEqual(legacy.tab, mapped.tabCells);
+});
+
+test("dashboard client projection rejects malformed and oversized payloads", () => {
+  assert.throws(() => dashboardToLegacyPayload({ schema: 1, rows: [], tabCells: "not-cells" }), /dashboard_payload_invalid/);
+  assert.throws(() => dashboardToLegacyPayload({ schema: 1, rows: Array(20001).fill({}), tabCells: [] }), /dashboard_payload_too_large/);
+  const result = mapDashboardRanges([], [[-1, 0, "outside"], [0, 26, "outside"], [0, 0, "good"]]);
+  assert.deepEqual(result.tabCells, [[0, 0, "good"]]);
 });

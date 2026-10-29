@@ -1,22 +1,36 @@
 import { createSecurePayrollClient } from "./secure-payroll-client.mjs";
+import { buildPayrollInvoice, filterPayrollLines, getPayrollPeriodOptions } from "./payroll-private-view.mjs";
 
 const runtime = globalThis.LRS_PRIVATE_PAYROLL_RUNTIME || {};
-const signInButton = document.getElementById("signIn");
-const refreshButton = document.getElementById("refresh");
-const signOutButton = document.getElementById("signOut");
-const message = document.getElementById("accessMessage");
-const readState = document.getElementById("readState");
-const readStateText = document.getElementById("readStateText");
-const summary = document.getElementById("summary");
-const records = document.getElementById("records");
-const emptyState = document.getElementById("emptyState");
-const rowsBody = document.getElementById("payrollRows");
+const $ = id => document.getElementById(id);
+const signInButton = $("signIn");
+const refreshButton = $("refresh");
+const signOutButton = $("signOut");
+const printButton = $("printInvoice");
+const message = $("accessMessage");
+const readState = $("readState");
+const readStateText = $("readStateText");
+const summary = $("summary");
+const records = $("records");
+const emptyState = $("emptyState");
+const rowsBody = $("payrollRows");
+const filtersPanel = $("filtersPanel");
+const invoicePanel = $("invoice");
+const invoiceHistory = $("invoiceHistory");
+const invoiceRows = $("invoiceRows");
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const dateFormat = new Intl.DateTimeFormat("es-US", { dateStyle: "medium", timeZone: "America/New_York" });
+let sourceLines = [];
+let sourceReviewCount = 0;
+let initializedFilters = false;
+let lastReadAt = null;
+
+function setText(element, value) { element.textContent = value == null ? "" : String(value); }
 
 function cellText(row, value, className) {
   const cell = document.createElement("td");
   if (className) cell.className = className;
-  cell.textContent = value == null ? "" : String(value);
+  setText(cell, value);
   row.append(cell);
   return cell;
 }
@@ -33,27 +47,98 @@ function statusBadge(row, line) {
   row.append(cell);
 }
 
+function uniqueSorted(values) {
+  return [...new Set(values.map(value => String(value || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+}
+
+function setSelectOptions(select, values, allLabel = "Todos") {
+  const current = select.value;
+  const options = [{ value: "", label: allLabel }, ...values.map(value => ({ value, label: value }))];
+  select.replaceChildren(...options.map(item => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    return option;
+  }));
+  if (options.some(option => option.value === current)) select.value = current;
+}
+
+function populateFilters(lines) {
+  const core = globalThis.PayrollCore;
+  const period = $("filterPeriod");
+  const selectedPeriod = period.value;
+  const periods = getPayrollPeriodOptions(lines, new Date(), core);
+  const periodOptions = [
+    { value: "all", label: "Todas las quincenas" },
+    ...periods.map(item => ({ value: item.key, label: item.label }))
+  ];
+  period.replaceChildren(...periodOptions.map(item => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    return option;
+  }));
+  const current = core.currentNYPeriod(new Date());
+  const currentKey = core.periodKey(current.year, current.month, current.half);
+  const validPeriod = periodOptions.some(option => option.value === selectedPeriod);
+  period.value = initializedFilters && validPeriod ? selectedPeriod : currentKey;
+
+  setSelectOptions($("filterTechnician"), uniqueSorted(lines.map(line => line.technician)), "Todos los técnicos");
+  setSelectOptions($("filterActivity"), uniqueSorted(lines.map(line => line.activity)));
+  setSelectOptions($("filterCase"), uniqueSorted(lines.map(line => line.caseName)));
+  setSelectOptions($("filterStatus"), uniqueSorted(lines.map(line => line.jobStatus)));
+  initializedFilters = true;
+}
+
+function getFilters() {
+  return {
+    period: $("filterPeriod").value,
+    from: $("filterFrom").value,
+    to: $("filterTo").value,
+    technician: $("filterTechnician").value,
+    role: $("filterRole").value,
+    activity: $("filterActivity").value,
+    caseName: $("filterCase").value,
+    project: $("filterProject").value,
+    jobStatus: $("filterStatus").value,
+    paymentStatus: $("filterPayment").value
+  };
+}
+
+function filterLines() { return filterPayrollLines(sourceLines, getFilters(), globalThis.PayrollCore); }
+
 function clearTable() {
   rowsBody.replaceChildren();
   summary.hidden = true;
   records.hidden = true;
+  filtersPanel.hidden = true;
   emptyState.hidden = true;
+  $("invoiceLaunch").disabled = true;
+  invoicePanel.hidden = true;
+  invoiceHistory.hidden = true;
 }
 
-function renderAssignments(sourceRows) {
-  const core = globalThis.PayrollCore;
-  if (!core?.buildAssignments || !Array.isArray(sourceRows)) throw new Error("payroll_projection_unavailable");
-  const model = core.buildAssignments(sourceRows);
-  const total = model.lines.reduce((sum, line) => sum + (Number.isFinite(line.amount) ? line.amount : 0), 0);
-  const reviewCount = model.lines.filter(line => line.paidState === "review").length + model.reviewRows.length + model.unassigned.length;
+function renderSummary(lines, model) {
+  const totals = globalThis.PayrollCore.summarize(lines);
+  const amount = lines.reduce((sum, line) => sum + line.amount, 0);
+  const paid = totals.reduce((sum, item) => sum + item.paid, 0);
+  const pending = totals.reduce((sum, item) => sum + item.pending, 0);
+  const reviewCount = lines.filter(line => line.paidState === "review").length + sourceReviewCount;
 
-  document.getElementById("lineCount").textContent = String(model.lines.length);
-  document.getElementById("totalAmount").textContent = money.format(total);
-  document.getElementById("reviewCount").textContent = String(reviewCount);
+  setText($("lineCount"), lines.length);
+  setText($("totalAmount"), money.format(amount));
+  setText($("paidAmount"), money.format(paid));
+  setText($("pendingAmount"), money.format(pending));
+  setText($("reviewCount"), reviewCount);
+  $("reviewMetric").classList.toggle("has-warning", reviewCount > 0);
   summary.hidden = false;
-  rowsBody.replaceChildren();
+  return reviewCount;
+}
 
-  for (const line of model.lines) {
+function renderAssignments(lines, model) {
+  rowsBody.replaceChildren();
+  for (const line of lines) {
     const row = document.createElement("tr");
     cellText(row, line.date);
     cellText(row, line.technician);
@@ -66,12 +151,76 @@ function renderAssignments(sourceRows) {
     cellText(row, money.format(line.amount), "amount");
     rowsBody.append(row);
   }
-
-  records.hidden = model.lines.length === 0;
-  emptyState.hidden = model.lines.length !== 0;
+  records.hidden = lines.length === 0;
+  emptyState.hidden = lines.length !== 0;
+  const reviewCount = renderSummary(lines, model);
+  const readLabel = lastReadAt ? `Lectura de la hoja: ${dateFormat.format(new Date(lastReadAt))}.` : "Lectura fresca de la hoja.";
   if (reviewCount > 0) {
-    message.textContent = `Consulta actualizada. ${reviewCount} asignación(es) requieren revisión; no se asignó saldo concluyente a esas líneas.`;
+    message.textContent = `${readLabel} ${reviewCount} registro(s) requieren revisión; la casilla no confirma una transferencia bancaria.`;
+  } else {
+    message.textContent = `${readLabel} Los estados son administrativos y no confirman una transferencia bancaria.`;
   }
+  updateInvoiceAction();
+}
+
+function applyFilters() {
+  if (!sourceLines.length) return;
+  const filtered = filterLines();
+  renderAssignments(filtered, { reviewRows: [], unassigned: [] });
+  const reviewCount = Number($("reviewCount").textContent);
+  setText($("resultCount"), `${filtered.length} asignaciones`);
+  if (reviewCount > 0) $("resultsNote").hidden = false;
+  else $("resultsNote").hidden = true;
+}
+
+function updateInvoiceAction() {
+  const technician = $("filterTechnician").value;
+  const period = $("filterPeriod").value;
+  const available = sourceLines.some(line => line.technician === technician && line.periodKey === period);
+  $("invoiceLaunch").disabled = !technician || period === "all" || !available;
+  if (!technician) $("invoiceHelp").textContent = "Selecciona un técnico y una quincena para preparar su invoice.";
+  else if (period === "all") $("invoiceHelp").textContent = "Selecciona una sola quincena para emitir un invoice individual.";
+  else if (!available) $("invoiceHelp").textContent = "No hay asignaciones elegibles para ese técnico y período.";
+  else $("invoiceHelp").textContent = "El PDF se prepara con las asignaciones completas del técnico en ese período, sin limitarlo por los otros filtros.";
+}
+
+function invoiceValue(id, value) { setText($(id), value); }
+
+function showInvoice() {
+  const technician = $("filterTechnician").value;
+  const period = $("filterPeriod").value;
+  const invoice = buildPayrollInvoice(sourceLines, technician, period, globalThis.PayrollCore);
+  if (!invoice) {
+    message.textContent = "No hay líneas elegibles para preparar ese invoice.";
+    return;
+  }
+  invoiceValue("invoiceTechnician", invoice.technician);
+  invoiceValue("invoicePeriod", invoice.periodLabel);
+  invoiceValue("invoiceReference", invoice.reference);
+  invoiceValue("invoiceGeneratedAt", new Date(invoice.generatedAt).toLocaleString("es-US", { timeZone: "America/New_York" }));
+  invoiceValue("invoiceLineCount", invoice.lines.length);
+  invoiceValue("invoiceTotal", money.format(invoice.total));
+  invoiceValue("invoicePaid", money.format(invoice.paid));
+  invoiceValue("invoicePending", money.format(invoice.pending));
+  invoiceValue("invoiceBalance", invoice.balance === null ? "Revisión requerida" : money.format(invoice.balance));
+  $("invoiceReviewNote").hidden = invoice.reviewCount === 0;
+  $("invoiceReportNote").hidden = invoice.reportPendingCount === 0;
+  invoiceRows.replaceChildren();
+  for (const line of invoice.lines) {
+    const row = document.createElement("tr");
+    cellText(row, line.date);
+    cellText(row, line.project || line.client);
+    cellText(row, line.activity);
+    cellText(row, line.caseName);
+    cellText(row, line.role);
+    cellText(row, line.jobStatus + (line.reportPending ? " · reporte pendiente" : ""));
+    cellText(row, line.paidState === "paid" ? "Marcado pagado" : line.paidState === "unpaid" ? "Pendiente" : line.paidState === "zero" ? "Sin importe" : "Revisar estado");
+    cellText(row, money.format(line.amount), "amount");
+    invoiceRows.append(row);
+  }
+  invoicePanel.hidden = false;
+  invoiceHistory.hidden = false;
+  invoicePanel.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
 
 function renderState(state) {
@@ -97,11 +246,21 @@ function renderState(state) {
   refreshButton.disabled = ["authorizing", "loading", "signing_out"].includes(state.status);
 
   if (state.status !== "ready" || !Array.isArray(state.rows)) {
+    sourceLines = [];
     clearTable();
     return;
   }
-  try { renderAssignments(state.rows); }
-  catch (_) {
+  try {
+    const model = globalThis.PayrollCore.buildAssignments(state.rows);
+    sourceLines = model.lines;
+    sourceReviewCount = model.reviewRows.length + model.unassigned.length;
+    lastReadAt = state.readAt || null;
+    populateFilters(sourceLines);
+    filtersPanel.hidden = false;
+    applyFilters();
+  } catch (_) {
+    sourceLines = [];
+    sourceReviewCount = 0;
     clearTable();
     message.textContent = "No se pudo interpretar la respuesta privada. No se mostraron datos anteriores.";
     readState.dataset.state = "error";
@@ -116,6 +275,29 @@ const controller = createSecurePayrollClient({
   onState: renderState
 });
 
+for (const id of ["filterPeriod", "filterFrom", "filterTo", "filterTechnician", "filterRole", "filterActivity", "filterCase", "filterProject", "filterStatus", "filterPayment"]) {
+  $(id).addEventListener(id === "filterFrom" || id === "filterTo" || id === "filterProject" ? "input" : "change", applyFilters);
+}
+$("resetFilters").addEventListener("click", () => {
+  $("filterFrom").value = "";
+  $("filterTo").value = "";
+  $("filterTechnician").value = "";
+  $("filterRole").value = "";
+  $("filterActivity").value = "";
+  $("filterCase").value = "";
+  $("filterProject").value = "";
+  $("filterStatus").value = "";
+  $("filterPayment").value = "all";
+  const current = globalThis.PayrollCore.currentNYPeriod(new Date());
+  $("filterPeriod").value = globalThis.PayrollCore.periodKey(current.year, current.month, current.half);
+  applyFilters();
+});
+$("invoiceLaunch").addEventListener("click", showInvoice);
+printButton.addEventListener("click", () => globalThis.print?.());
+$("closeInvoice").addEventListener("click", () => { invoicePanel.hidden = true; invoiceHistory.hidden = true; });
+$("driveOnly").addEventListener("click", () => { message.textContent = "La integración segura con Drive todavía no está configurada; no se creó ni se reemplazó ningún archivo."; });
+$("driveAndResend").addEventListener("click", () => { message.textContent = "La integración de Drive y correo todavía no está configurada; no se envió ningún mensaje."; });
+$("retryEmailOnly").addEventListener("click", () => { message.textContent = "El servicio seguro de correo todavía no está configurado; no se inició ningún reenvío."; });
 signInButton.addEventListener("click", () => { void controller.signIn(); });
 refreshButton.addEventListener("click", () => { void controller.refresh(); });
 signOutButton.addEventListener("click", () => { void controller.signOut(); });

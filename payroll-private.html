@@ -83,8 +83,9 @@
     .button.primary { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
     .button[hidden] { display: none; }
     .button:disabled { cursor: wait; opacity: .66; }
-    .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
     .metric { min-width: 0; border: 1px solid var(--line); border-radius: 15px; padding: 16px; background: var(--surface); }
+    .metric.has-warning { border-color: color-mix(in srgb, var(--warning) 36%, var(--line)); }
     .metric-label { color: var(--muted); font-size: 12px; font-weight: 600; }
     .metric-value { display: block; margin-top: 7px; font-size: 22px; font-weight: 720; letter-spacing: -.035em; }
     .table-wrap { overflow: auto; max-width: 100%; }
@@ -101,6 +102,48 @@
     .table-note { margin: 0; padding: 14px 20px 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
     .empty { margin: 18px 0 0; border: 1px dashed var(--line); border-radius: 15px; padding: 22px; color: var(--muted); text-align: center; }
     .footnote { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .filters { margin-top: 18px; padding: 20px; }
+    .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .section-heading p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .field { display: grid; gap: 6px; min-width: 0; }
+    .field label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .field input, .field select { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 11px; padding: 0 11px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+    .field input:focus-visible, .field select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; }
+    .result-count, .muted-text { color: var(--muted); font-size: 12px; }
+    .report-action { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 16px; border: 1px solid var(--line); border-radius: 15px; padding: 16px; background: var(--surface-soft); }
+    .report-action p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .invoice { margin-top: 20px; }
+    .invoice-paper { padding: clamp(22px, 4vw, 40px); }
+    .invoice-top { display: flex; align-items: start; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+    .invoice-title { margin: 0; font-size: 28px; letter-spacing: -.04em; }
+    .invoice-kicker { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    .invoice-reference { text-align: right; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+    .invoice-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .invoice-meta div { border-radius: 12px; padding: 12px; background: var(--surface-soft); }
+    .invoice-meta dt { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; }
+    .invoice-meta dd { margin: 5px 0 0; font-size: 14px; font-weight: 680; overflow-wrap: anywhere; }
+    .invoice-table { min-width: 720px; }
+    .invoice-total { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, 300px); gap: 20px; margin-top: 18px; }
+    .invoice-notes { display: grid; align-content: start; gap: 8px; }
+    .invoice-note { border-radius: 11px; padding: 11px 13px; color: var(--warning); background: var(--warning-bg); font-size: 12px; line-height: 1.45; }
+    .invoice-note[hidden] { display: none; }
+    .totals { display: grid; gap: 7px; margin: 0; }
+    .totals div { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 6px 0; font-size: 13px; }
+    .totals dt { color: var(--muted); }
+    .totals dd { margin: 0; font-weight: 680; text-align: right; font-variant-numeric: tabular-nums; }
+    .totals .grand-total { font-size: 16px; }
+    .invoice-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 18px; }
+    .invoice-controls .muted-text { flex-basis: 100%; }
+    .history-panel { margin-top: 16px; }
+    .history-state { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); padding: 13px 15px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .history-state strong { display: block; color: var(--ink); margin-bottom: 2px; }
+    .history-table { margin-top: 12px; }
+    .button.secondary { background: var(--surface-soft); }
+    .button[disabled] { cursor: not-allowed; opacity: .48; }
+    .button[hidden] { display: none; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     @media (max-width: 680px) {
       .shell { width: min(100% - 24px, 1160px); padding-top: 18px; }
       .hero { display: block; margin-top: 22px; }
@@ -108,9 +151,37 @@
       .access-panel { grid-template-columns: 1fr; }
       .actions { justify-content: stretch; }
       .actions .button { flex: 1 1 150px; }
-      .summary { grid-template-columns: 1fr; gap: 8px; }
+      .summary { grid-template-columns: 1fr 1fr; gap: 8px; }
       .metric { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 15px; }
       .metric-value { margin: 0; font-size: 19px; }
+      .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .section-heading, .filter-actions, .report-action { align-items: stretch; flex-direction: column; }
+      .invoice-meta { grid-template-columns: 1fr; gap: 8px; }
+      .invoice-top { flex-direction: column; }
+      .invoice-reference { text-align: left; }
+      .invoice-total { grid-template-columns: 1fr; }
+      .invoice-controls .button { flex: 1 1 100%; }
+    }
+    @media (max-width: 390px) {
+      .filter-grid { grid-template-columns: 1fr; }
+      .summary { grid-template-columns: 1fr; }
+    }
+    @media print {
+      @page { size: letter; margin: 14mm; }
+      html, body { background: #fff !important; color: #1d1d1f !important; }
+      body * { visibility: hidden !important; }
+      #invoice, #invoice * { visibility: visible !important; }
+      #invoice { display: block !important; position: absolute; inset: 0; width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; background: #fff; }
+      .invoice-paper { padding: 0; }
+      .invoice-controls { display: none !important; }
+      .invoice-table { width: 100%; min-width: 0; font-size: 9pt; }
+      .invoice-table th, .invoice-table td { padding: 7px 6px; }
+      .invoice-table th { position: static; background: #f4f4f6; }
+      .invoice-table thead { display: table-header-group; }
+      .invoice-table tr, .invoice-meta, .invoice-total, .totals div { break-inside: avoid; page-break-inside: avoid; }
+      .invoice-note { color: #704600; background: #fff6e5; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .badge { border: 1px solid #ddd; background: #f7f7fa; }
+      .invoice-reference, .invoice-kicker, .muted-text { color: #555; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -156,10 +227,39 @@
       </div>
     </section>
 
+    <section id="filtersPanel" class="panel filters" aria-labelledby="filtersTitle" hidden>
+      <div class="section-heading">
+        <div><h2 id="filtersTitle">Consulta de nómina</h2><p>Filtra por quincena, técnico, proyecto y estado administrativo.</p></div>
+        <span id="resultCount" class="result-count" aria-live="polite">0 asignaciones</span>
+      </div>
+      <div class="filter-grid">
+        <div class="field"><label for="filterPeriod">Año, mes y quincena</label><select id="filterPeriod"><option value="all">Todas las quincenas</option></select></div>
+        <div class="field"><label for="filterTechnician">Técnico</label><select id="filterTechnician"><option value="">Todos los técnicos</option></select></div>
+        <div class="field"><label for="filterRole">Rol</label><select id="filterRole"><option value="">Todos los roles</option><option>TP</option><option>TA1</option><option>TA2</option></select></div>
+        <div class="field"><label for="filterPayment">Estado administrativo</label><select id="filterPayment"><option value="all">Todos</option><option value="paid">Marcado pagado</option><option value="unpaid">Pendiente</option><option value="review">Revisar estado</option><option value="zero">Sin importe</option></select></div>
+        <div class="field"><label for="filterFrom">Fecha de trabajo · desde</label><input id="filterFrom" type="date"></div>
+        <div class="field"><label for="filterTo">Fecha de trabajo · hasta</label><input id="filterTo" type="date"></div>
+        <div class="field"><label for="filterActivity">Actividad</label><select id="filterActivity"><option value="">Todas las actividades</option></select></div>
+        <div class="field"><label for="filterCase">CASE</label><select id="filterCase"><option value="">Todos los CASE</option></select></div>
+        <div class="field"><label for="filterProject">Proyecto o cliente</label><input id="filterProject" type="search" autocomplete="off" placeholder="Buscar proyecto o cliente"></div>
+        <div class="field"><label for="filterStatus">Estado del trabajo</label><select id="filterStatus"><option value="">Todos los estados elegibles</option></select></div>
+      </div>
+      <div class="filter-actions">
+        <span id="resultsNote" class="muted-text" hidden>Hay importes cuyo estado administrativo requiere revisión.</span>
+        <button id="resetFilters" class="button secondary" type="button">Restablecer filtros</button>
+      </div>
+      <div class="report-action">
+        <div><strong>Invoice individual</strong><p id="invoiceHelp">Selecciona un técnico y una quincena para preparar su invoice.</p></div>
+        <button id="invoiceLaunch" class="button primary" type="button" disabled>Preparar PDF de nómina</button>
+      </div>
+    </section>
+
     <section id="summary" class="summary" aria-label="Resumen de nómina" hidden>
       <div class="metric"><span class="metric-label">Asignaciones</span><strong id="lineCount" class="metric-value">0</strong></div>
-      <div class="metric"><span class="metric-label">Importe total</span><strong id="totalAmount" class="metric-value">$0.00</strong></div>
-      <div class="metric"><span class="metric-label">Estados por revisar</span><strong id="reviewCount" class="metric-value">0</strong></div>
+      <div class="metric"><span class="metric-label">Total asignado</span><strong id="totalAmount" class="metric-value">$0.00</strong></div>
+      <div class="metric"><span class="metric-label">Marcado pagado</span><strong id="paidAmount" class="metric-value">$0.00</strong></div>
+      <div class="metric"><span class="metric-label">Pendiente</span><strong id="pendingAmount" class="metric-value">$0.00</strong></div>
+      <div id="reviewMetric" class="metric"><span class="metric-label">Estados por revisar</span><strong id="reviewCount" class="metric-value">0</strong></div>
     </section>
 
     <section id="records" class="panel" aria-label="Detalle de asignaciones" hidden>
@@ -179,8 +279,66 @@
       <p class="table-note">Los estados reflejan las casillas actuales de la hoja. Un estado de pago no confirma una transferencia bancaria.</p>
     </section>
 
-    <p id="emptyState" class="empty" hidden>No hay asignaciones para mostrar.</p>
-    <p class="footnote">La Nómina privada consulta la fuente autorizada al actualizar. No conserva asignaciones en el navegador ni cambia las casillas de pago.</p>
+    <p id="emptyState" class="empty" hidden>No hay asignaciones para mostrar con los filtros seleccionados.</p>
+
+    <section id="invoice" class="panel invoice" aria-labelledby="invoiceTitle" hidden>
+      <div class="invoice-paper">
+        <header class="invoice-top">
+          <div><p class="eyebrow">LRS · RESUMEN DE SERVICIOS</p><h2 id="invoiceTitle" class="invoice-title">Invoice de nómina</h2><p class="invoice-kicker">Vista individual para revisión y descarga local.</p></div>
+          <div class="invoice-reference"><strong>Referencia de vista</strong><br><span id="invoiceReference"></span><br><span>Borrador local · no archivado</span></div>
+        </header>
+        <dl class="invoice-meta">
+          <div><dt>Técnico</dt><dd id="invoiceTechnician"></dd></div>
+          <div><dt>Período de pago</dt><dd id="invoicePeriod"></dd></div>
+          <div><dt>Preparado</dt><dd id="invoiceGeneratedAt"></dd></div>
+          <div><dt>Líneas</dt><dd id="invoiceLineCount"></dd></div>
+        </dl>
+        <div class="table-wrap">
+          <table class="invoice-table">
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Proyecto / cliente</th><th scope="col">Actividad</th><th scope="col">CASE</th><th scope="col">Rol</th><th scope="col">Trabajo</th><th scope="col">Estado de pago</th><th scope="col" class="amount">Importe</th></tr></thead>
+            <tbody id="invoiceRows"></tbody>
+          </table>
+        </div>
+        <div class="invoice-total">
+          <div class="invoice-notes">
+            <p id="invoiceReviewNote" class="invoice-note" hidden>El estado de pago de una o más líneas necesita revisión. El saldo no se presenta como concluyente.</p>
+            <p id="invoiceReportNote" class="invoice-note" hidden>Una o más asignaciones REALIZADO tienen pendiente completar su reporte documental.</p>
+            <p class="muted-text">La casilla de pago es un estado administrativo del Sheet; no verifica transferencias bancarias.</p>
+          </div>
+          <dl class="totals">
+            <div><dt>Total asignado</dt><dd id="invoiceTotal"></dd></div>
+            <div><dt>Marcado pagado</dt><dd id="invoicePaid"></dd></div>
+            <div><dt>Pendiente conocido</dt><dd id="invoicePending"></dd></div>
+            <div class="grand-total"><dt>Saldo</dt><dd id="invoiceBalance"></dd></div>
+          </dl>
+        </div>
+        <div class="invoice-controls" aria-label="Acciones del invoice">
+          <button id="printInvoice" class="button primary" type="button">Imprimir o guardar como PDF</button>
+          <button id="driveOnly" class="button" type="button" disabled title="La integración segura con Drive no está configurada">Regenerar · solo actualizar en Drive</button>
+          <button id="driveAndResend" class="button" type="button" disabled title="La integración segura con Drive y correo no está configurada">Regenerar · actualizar en Drive y reenviar al técnico</button>
+          <button id="retryEmailOnly" class="button secondary" type="button" disabled title="El servicio de correo todavía no está configurado">Reintentar solo el envío</button>
+          <button id="closeInvoice" class="button secondary" type="button">Cerrar vista</button>
+          <span class="muted-text">Guardar localmente no escribe al Sheet, Drive ni correo. Regenerar, reenviar y reintentar envío requieren el backend privado.</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="invoiceHistory" class="panel history-panel" aria-labelledby="historyTitle" aria-live="polite" hidden>
+      <div class="section-heading">
+        <div><h2 id="historyTitle">Historial de archivos</h2><p>Versiones guardadas en NOMINAS / año / mes / técnico y estado de envío.</p></div>
+      </div>
+      <div class="history-state" role="status">
+        <div><strong>Historial de Drive no disponible</strong><span id="historyUnavailable">Drive aún no está conectado. Esta pantalla no puede confirmar si existen versiones anteriores.</span></div>
+      </div>
+      <div class="table-wrap history-table">
+        <table class="invoice-table">
+          <thead><tr><th scope="col">Período</th><th scope="col">Versión</th><th scope="col">Archivo</th><th scope="col">Envío al técnico</th></tr></thead>
+          <tbody id="invoiceHistoryRows"><tr><td colspan="4" class="muted-text">Conecta Drive para consultar el historial del archivo.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footnote">Nómina lee importes y casillas del Sheet, que sigue siendo la fuente de verdad. El PDF local no marca pagos ni guarda historial en Drive. La lectura no conserva asignaciones en el navegador.</p>
   </main>
 </body>
 </html>
