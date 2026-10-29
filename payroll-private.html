@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Nómina privada · LRS</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: #f2f2f7;
+      --surface: #fff;
+      --surface-soft: #f7f7fa;
+      --ink: #1d1d1f;
+      --muted: #68686d;
+      --line: rgba(0, 0, 0, .09);
+      --accent: #0879f9;
+      --accent-ink: #fff;
+      --warning: #8a4b00;
+      --warning-bg: #fff6e5;
+      --danger: #a52320;
+      --danger-bg: #fff1f0;
+      --success: #146c36;
+      --success-bg: #eaf8ef;
+      --focus: #005fcc;
+      --shadow: 0 16px 48px rgba(27, 31, 44, .09);
+      --ease-out: cubic-bezier(.23, 1, .32, 1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--page);
+      color: var(--ink);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #151518;
+        --surface: #222226;
+        --surface-soft: #2b2b30;
+        --ink: #f5f5f7;
+        --muted: #b2b2b8;
+        --line: rgba(255, 255, 255, .12);
+        --accent: #4c9dff;
+        --accent-ink: #081c32;
+        --warning: #ffd28a;
+        --warning-bg: #382b16;
+        --danger: #ff9a93;
+        --danger-bg: #3c201f;
+        --success: #89dfa9;
+        --success-bg: #1c3326;
+        --focus: #80b9ff;
+        --shadow: 0 16px 48px rgba(0, 0, 0, .28);
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; background: var(--page); }
+    button, a { font: inherit; }
+    a { color: var(--accent); text-underline-offset: .18em; }
+    button:focus-visible, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .shell { width: min(1160px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 48px; }
+    .masthead { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--ink); color: var(--surface); font-size: 13px; font-weight: 750; letter-spacing: -.04em; }
+    .brand-name { font-size: 13px; color: var(--muted); font-weight: 650; letter-spacing: .02em; }
+    .back-link { font-size: 14px; font-weight: 600; text-decoration: none; }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 24px; margin: 28px 0 20px; }
+    .eyebrow { margin: 0 0 8px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(30px, 5vw, 42px); line-height: 1.08; letter-spacing: -.045em; }
+    .subtitle { max-width: 620px; margin: 10px 0 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+    .read-state { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .read-dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; }
+    .read-state[data-state="ready"] .read-dot { background: #2eaf59; }
+    .read-state[data-state="loading"] .read-dot, .read-state[data-state="authorizing"] .read-dot { background: var(--accent); }
+    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
+    .access-panel { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; padding: clamp(22px, 4vw, 34px); }
+    .access-copy { max-width: 690px; }
+    .access-label { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    .access-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+    h2 { margin: 0; font-size: 20px; letter-spacing: -.025em; }
+    .access-message { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+    .button { min-height: 42px; border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; background: var(--surface); color: var(--ink); cursor: pointer; font-size: 14px; font-weight: 650; transition: transform 150ms var(--ease-out), background-color 150ms ease, border-color 150ms ease; }
+    .button:hover { border-color: var(--accent); }
+    .button:active { transform: scale(.98); }
+    .button.primary { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
+    .button[hidden] { display: none; }
+    .button:disabled { cursor: wait; opacity: .66; }
+    .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .metric { min-width: 0; border: 1px solid var(--line); border-radius: 15px; padding: 16px; background: var(--surface); }
+    .metric-label { color: var(--muted); font-size: 12px; font-weight: 600; }
+    .metric-value { display: block; margin-top: 7px; font-size: 22px; font-weight: 720; letter-spacing: -.035em; }
+    .table-wrap { overflow: auto; max-width: 100%; }
+    table { width: 100%; min-width: 900px; border-collapse: collapse; text-align: left; }
+    caption { padding: 18px 20px; text-align: left; font-size: 16px; font-weight: 700; }
+    th, td { border-top: 1px solid var(--line); padding: 12px 14px; vertical-align: top; }
+    th { position: sticky; top: 0; background: var(--surface-soft); color: var(--muted); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+    td { font-size: 13px; }
+    td.amount { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .badge { display: inline-flex; border-radius: 999px; padding: 4px 8px; background: var(--surface-soft); font-size: 11px; font-weight: 650; white-space: nowrap; }
+    .badge.paid { color: var(--success); background: var(--success-bg); }
+    .badge.unpaid { color: var(--warning); background: var(--warning-bg); }
+    .badge.review { color: var(--danger); background: var(--danger-bg); }
+    .table-note { margin: 0; padding: 14px 20px 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .empty { margin: 18px 0 0; border: 1px dashed var(--line); border-radius: 15px; padding: 22px; color: var(--muted); text-align: center; }
+    .footnote { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    @media (max-width: 680px) {
+      .shell { width: min(100% - 24px, 1160px); padding-top: 18px; }
+      .hero { display: block; margin-top: 22px; }
+      .read-state { margin-top: 14px; }
+      .access-panel { grid-template-columns: 1fr; }
+      .actions { justify-content: stretch; }
+      .actions .button { flex: 1 1 150px; }
+      .summary { grid-template-columns: 1fr; gap: 8px; }
+      .metric { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 15px; }
+      .metric-value { margin: 0; font-size: 19px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+  <script src="./payroll-core.js" defer></script>
+  <script type="module" src="./secure-payroll-ui.mjs"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="brand" aria-label="LRS Dashboard">
+        <span class="brand-mark" aria-hidden="true">LRS</span>
+        <span class="brand-name">LRS · OPERACIONES</span>
+      </div>
+      <a class="back-link" href="./index.html">Volver al Dashboard</a>
+    </header>
+
+    <section class="hero" aria-labelledby="pageTitle">
+      <div>
+        <p class="eyebrow">Área privada</p>
+        <h1 id="pageTitle">Nómina</h1>
+        <p class="subtitle">Consulta de asignaciones y estados administrativos de pago.</p>
+      </div>
+      <div id="readState" class="read-state" data-state="unconfigured" aria-live="polite">
+        <span class="read-dot" aria-hidden="true"></span>
+        <span id="readStateText">Sin conexión privada</span>
+      </div>
+    </section>
+
+    <section class="panel access-panel" aria-labelledby="accessTitle">
+      <div class="access-copy">
+        <span class="access-label">Acceso protegido</span>
+        <h2 id="accessTitle">Validación de acceso</h2>
+        <p id="accessMessage" class="access-message" role="status" aria-live="polite">
+          El acceso privado aún no está configurado. Esta vista no consulta fuentes públicas ni usa datos guardados.
+        </p>
+      </div>
+      <div class="actions">
+        <button id="signIn" class="button primary" type="button" hidden>Continuar con Google</button>
+        <button id="refresh" class="button" type="button" hidden>Actualizar</button>
+        <button id="signOut" class="button" type="button" hidden>Cerrar sesión</button>
+      </div>
+    </section>
+
+    <section id="summary" class="summary" aria-label="Resumen de nómina" hidden>
+      <div class="metric"><span class="metric-label">Asignaciones</span><strong id="lineCount" class="metric-value">0</strong></div>
+      <div class="metric"><span class="metric-label">Importe total</span><strong id="totalAmount" class="metric-value">$0.00</strong></div>
+      <div class="metric"><span class="metric-label">Estados por revisar</span><strong id="reviewCount" class="metric-value">0</strong></div>
+    </section>
+
+    <section id="records" class="panel" aria-label="Detalle de asignaciones" hidden>
+      <div class="table-wrap" tabindex="0" aria-label="Tabla desplazable de asignaciones de nómina">
+        <table>
+          <caption>Asignaciones consultadas desde la hoja</caption>
+          <thead>
+            <tr>
+              <th scope="col">Fecha</th><th scope="col">Técnico</th><th scope="col">Rol</th>
+              <th scope="col">Proyecto / cliente</th><th scope="col">Actividad</th><th scope="col">CASE</th>
+              <th scope="col">Trabajo</th><th scope="col">Pago</th><th scope="col" class="amount">Importe</th>
+            </tr>
+          </thead>
+          <tbody id="payrollRows"></tbody>
+        </table>
+      </div>
+      <p class="table-note">Los estados reflejan las casillas actuales de la hoja. Un estado de pago no confirma una transferencia bancaria.</p>
+    </section>
+
+    <p id="emptyState" class="empty" hidden>No hay asignaciones para mostrar.</p>
+    <p class="footnote">La Nómina privada consulta la fuente autorizada al actualizar. No conserva asignaciones en el navegador ni cambia las casillas de pago.</p>
+  </main>
+</body>
+</html>
