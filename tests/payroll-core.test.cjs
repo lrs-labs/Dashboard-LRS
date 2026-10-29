@@ -134,6 +134,29 @@ test("mantiene saldo sin asignar fuera de técnicos e identifica pagos por revis
   assert.equal(Payroll.summarize(result.lines)[0].review, 40);
 });
 
+test("flags de pago ausentes o inválidos se revisan y bloquean el saldo concluyente", () => {
+  const lines = Payroll.buildAssignments([
+    row({ paidTP: undefined }),
+    row({ paidTP: null }),
+    row({ paidTP: "" }),
+    row({ paidTP: 2 }),
+    row({ paidTP: false }),
+    row({ paidTP: 0 }),
+    row({ paidTP: 1 })
+  ]).lines.filter(line => line.role === "TP");
+  assert.deepEqual(lines.map(line => line.paidState), ["review", "review", "review", "review", "unpaid", "unpaid", "paid"]);
+  const summary = Payroll.summarize(lines)[0];
+  assert.equal(summary.review, 720);
+  assert.equal(summary.balance, null);
+});
+
+test("la lectura del flag GViz conserva la diferencia entre dato ausente y false explícito", () => {
+  assert.equal(Payroll.readPaidCell({ c: [] }, 13), undefined);
+  assert.equal(Payroll.readPaidCell({ c: [{ v: false }] }, 0), false);
+  assert.equal(Payroll.readPaidCell({ c: [{ v: null }] }, 0), null);
+  assert.equal(Payroll.readPaidCell({ c: [{ f: "" }] }, 0), "");
+});
+
 test("usa el día B para año y mes y el valor F para la quincena de liquidación", () => {
   const result = Payroll.buildAssignments([row({ date: "2026-10-28", period: "1RA QUINCENA" })]);
   assert.equal(result.lines[0].periodKey, "2026-10-Q1");

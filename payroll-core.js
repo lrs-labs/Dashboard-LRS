@@ -62,12 +62,23 @@
 
   function paidState(value) {
     if (value === true) return "paid";
-    if (value === false || value == null || text(value) === "") return "unpaid";
-    if (typeof value === "number") return value === 0 ? "unpaid" : "paid";
+    if (value === false) return "unpaid";
+    if (value == null || text(value) === "") return "review";
+    if (typeof value === "number") return value === 0 ? "unpaid" : value === 1 ? "paid" : "review";
     const v = normalizedText(value);
     if (["TRUE", "YES", "SI", "PAGADO", "PAGADA", "PAID", "DONE", "X", "1", "✓", "✔"].includes(v)) return "paid";
     if (["FALSE", "NO", "PENDIENTE", "UNPAID", "0"].includes(v)) return "unpaid";
     return "review";
+  }
+
+  function readPaidCell(row, index) {
+    const cells = row && Array.isArray(row.c) ? row.c : null;
+    if (!cells || !Number.isInteger(index) || index < 0 || index >= cells.length) return undefined;
+    const cell = cells[index];
+    if (!cell || typeof cell !== "object") return undefined;
+    if (Object.prototype.hasOwnProperty.call(cell, "v")) return cell.v;
+    if (Object.prototype.hasOwnProperty.call(cell, "f")) return cell.f;
+    return undefined;
   }
 
   function isReportComplete(value) {
@@ -570,7 +581,11 @@
       else if (line.paidState === "review") summary.review += line.amount;
       if (line.reportPending) summary.reportPending++;
     });
-    return [...summaries.values()].map(summary => ({ ...summary, projects: summary.projects.size, balance: summary.total - summary.paid }))
+    return [...summaries.values()].map(summary => ({
+      ...summary,
+      projects: summary.projects.size,
+      balance: summary.review > 0 ? null : summary.total - summary.paid
+    }))
       .sort((a, b) => a.technician.localeCompare(b.technician, "es"));
   }
 
@@ -601,6 +616,7 @@
     planInvoiceDelivery,
     planAutomaticPaymentBatch,
     paidState,
+    readPaidCell,
     parseAmount,
     parseDate,
     parseHalf,
