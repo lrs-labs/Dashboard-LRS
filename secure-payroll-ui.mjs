@@ -1,12 +1,15 @@
 import { createSecurePayrollClient } from "./secure-payroll-client.mjs";
+import { createPrivateAuthRuntime } from "./private-auth-runtime.mjs";
 import { buildPayrollInvoice, filterPayrollLines, getPayrollPeriodOptions } from "./payroll-private-view.mjs";
+import { generatePayrollInvoicePdf } from "./payroll-invoice-pdf.mjs";
 
-const runtime = globalThis.LRS_PRIVATE_PAYROLL_RUNTIME || {};
+const runtime = createPrivateAuthRuntime(globalThis.LRS_PRIVATE_PAYROLL_RUNTIME || {});
 const $ = id => document.getElementById(id);
 const signInButton = $("signIn");
 const refreshButton = $("refresh");
 const signOutButton = $("signOut");
 const printButton = $("printInvoice");
+const downloadPdfButton = $("downloadInvoicePdf");
 const message = $("accessMessage");
 const readState = $("readState");
 const readStateText = $("readStateText");
@@ -24,6 +27,7 @@ let sourceLines = [];
 let sourceReviewCount = 0;
 let initializedFilters = false;
 let lastReadAt = null;
+let currentInvoice = null;
 
 function setText(element, value) { element.textContent = value == null ? "" : String(value); }
 
@@ -121,13 +125,14 @@ function clearTable() {
 
 function renderSummary(lines, model) {
   const totals = globalThis.PayrollCore.summarize(lines);
-  const amount = lines.reduce((sum, line) => sum + line.amount, 0);
+  const amountUnknown = lines.some(line => typeof line.amount !== "number" || !Number.isFinite(line.amount));
+  const amount = amountUnknown ? null : lines.reduce((sum, line) => sum + line.amount, 0);
   const paid = totals.reduce((sum, item) => sum + item.paid, 0);
   const pending = totals.reduce((sum, item) => sum + item.pending, 0);
   const reviewCount = lines.filter(line => line.paidState === "review").length + sourceReviewCount;
 
   setText($("lineCount"), lines.length);
-  setText($("totalAmount"), money.format(amount));
+  setText($("totalAmount"), amount === null ? "Revisión requerida" : money.format(amount));
   setText($("paidAmount"), money.format(paid));
   setText($("pendingAmount"), money.format(pending));
   setText($("reviewCount"), reviewCount);
@@ -148,7 +153,7 @@ function renderAssignments(lines, model) {
     cellText(row, line.caseName);
     cellText(row, `${line.jobStatus}${line.reportPending ? " · reporte pendiente" : ""}`);
     statusBadge(row, line);
-    cellText(row, money.format(line.amount), "amount");
+    cellText(row, Number.isFinite(line.amount) ? money.format(line.amount) : "Revisar importe", "amount");
     rowsBody.append(row);
   }
   records.hidden = lines.length === 0;
@@ -194,16 +199,17 @@ function showInvoice() {
     message.textContent = "No hay líneas elegibles para preparar ese invoice.";
     return;
   }
+  currentInvoice = invoice;
   invoiceValue("invoiceTechnician", invoice.technician);
   invoiceValue("invoicePeriod", invoice.periodLabel);
   invoiceValue("invoiceReference", invoice.reference);
   invoiceValue("invoiceGeneratedAt", new Date(invoice.generatedAt).toLocaleString("es-US", { timeZone: "America/New_York" }));
   invoiceValue("invoiceLineCount", invoice.lines.length);
-  invoiceValue("invoiceTotal", money.format(invoice.total));
+  invoiceValue("invoiceTotal", invoice.total === null ? "Revisión requerida" : money.format(invoice.total));
   invoiceValue("invoicePaid", money.format(invoice.paid));
   invoiceValue("invoicePending", money.format(invoice.pending));
   invoiceValue("invoiceBalance", invoice.balance === null ? "Revisión requerida" : money.format(invoice.balance));
-  $("invoiceReviewNote").hidden = invoice.reviewCount === 0;
+  $("invoiceReviewNote").hidden = invoice.reviewCount === 0 && invoice.amountReviewCount === 0;
   $("invoiceReportNote").hidden = invoice.reportPendingCount === 0;
   invoiceRows.replaceChildren();
   for (const line of invoice.lines) {
@@ -215,12 +221,31 @@ function showInvoice() {
     cellText(row, line.role);
     cellText(row, line.jobStatus + (line.reportPending ? " · reporte pendiente" : ""));
     cellText(row, line.paidState === "paid" ? "Marcado pagado" : line.paidState === "unpaid" ? "Pendiente" : line.paidState === "zero" ? "Sin importe" : "Revisar estado");
-    cellText(row, money.format(line.amount), "amount");
+    cellText(row, Number.isFinite(line.amount) ? money.format(line.amount) : "Revisar importe", "amount");
     invoiceRows.append(row);
   }
   invoicePanel.hidden = false;
   invoiceHistory.hidden = false;
   invoicePanel.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+
+function downloadInvoicePdf() {
+  if (!currentInvoice) return;
+  try {
+    const { bytes, fileName } = generatePayrollInvoicePdf(currentInvoice);
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.hidden = true;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    message.textContent = "Se descargó un borrador PDF. No se archivó en Drive ni se envió al técnico.";
+  } catch (_) {
+    message.textContent = "No se pudo generar el PDF de vista previa. No se archivó ni se envió.";
+  }
 }
 
 function renderState(state) {
@@ -271,6 +296,7 @@ function renderState(state) {
 const controller = createSecurePayrollClient({
   config: runtime.config,
   authClient: runtime.authClient,
+  sessionStorage: runtime.sessionStorage,
   fetcher: globalThis.fetch?.bind(globalThis),
   onState: renderState
 });
@@ -294,7 +320,8 @@ $("resetFilters").addEventListener("click", () => {
 });
 $("invoiceLaunch").addEventListener("click", showInvoice);
 printButton.addEventListener("click", () => globalThis.print?.());
-$("closeInvoice").addEventListener("click", () => { invoicePanel.hidden = true; invoiceHistory.hidden = true; });
+downloadPdfButton.addEventListener("click", downloadInvoicePdf);
+$("closeInvoice").addEventListener("click", () => { invoicePanel.hidden = true; invoiceHistory.hidden = true; currentInvoice = null; });
 $("driveOnly").addEventListener("click", () => { message.textContent = "La integración segura con Drive todavía no está configurada; no se creó ni se reemplazó ningún archivo."; });
 $("driveAndResend").addEventListener("click", () => { message.textContent = "La integración de Drive y correo todavía no está configurada; no se envió ningún mensaje."; });
 $("retryEmailOnly").addEventListener("click", () => { message.textContent = "El servicio seguro de correo todavía no está configurado; no se inició ningún reenvío."; });

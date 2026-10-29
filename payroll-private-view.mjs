@@ -60,10 +60,12 @@ export function buildPayrollInvoice(lines, technician, periodKey, core) {
   if (!invoiceLines.length) return null;
 
   const summary = core.summarize(invoiceLines)[0];
-  const amount = invoiceLines.reduce((sum, line) => sum + line.amount, 0);
-  const paid = invoiceLines.reduce((sum, line) => sum + (line.paidState === "paid" ? line.amount : 0), 0);
-  const pending = invoiceLines.reduce((sum, line) => sum + (line.paidState === "unpaid" ? line.amount : 0), 0);
-  const review = invoiceLines.reduce((sum, line) => sum + (line.paidState === "review" ? line.amount : 0), 0);
+  const amountReviewCount = invoiceLines.filter(line => typeof line.amount !== "number" || !Number.isFinite(line.amount)).length;
+  const knownAmount = invoiceLines.reduce((sum, line) => sum + (Number.isFinite(line.amount) ? line.amount : 0), 0);
+  const paid = invoiceLines.reduce((sum, line) => sum + (line.paidState === "paid" && Number.isFinite(line.amount) ? line.amount : 0), 0);
+  const pending = invoiceLines.reduce((sum, line) => sum + (line.paidState === "unpaid" && Number.isFinite(line.amount) ? line.amount : 0), 0);
+  const review = invoiceLines.reduce((sum, line) => sum + (line.paidState === "review" && Number.isFinite(line.amount) ? line.amount : 0), 0);
+  const reviewCount = invoiceLines.filter(line => line.paidState === "review").length;
   return {
     technician: name,
     period,
@@ -71,12 +73,14 @@ export function buildPayrollInvoice(lines, technician, periodKey, core) {
     periodLabel: core.periodLabel(period.year, period.month, period.half),
     reference: core.folio(name, period.year, period.month, period.half, invoiceLines),
     lines: invoiceLines,
-    total: amount,
+    total: amountReviewCount ? null : knownAmount,
+    knownTotal: knownAmount,
     paid,
     pending,
     review,
-    balance: review > 0 ? null : amount - paid,
-    reviewCount: invoiceLines.filter(line => line.paidState === "review").length,
+    balance: reviewCount > 0 || amountReviewCount > 0 ? null : knownAmount - paid,
+    reviewCount,
+    amountReviewCount,
     reportPendingCount: invoiceLines.filter(line => line.reportPending).length,
     projectCount: summary?.projects || 0,
     generatedAt: new Date().toISOString(),

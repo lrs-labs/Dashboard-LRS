@@ -301,7 +301,7 @@
         </div>
         <div class="invoice-total">
           <div class="invoice-notes">
-            <p id="invoiceReviewNote" class="invoice-note" hidden>El estado de pago de una o más líneas necesita revisión. El saldo no se presenta como concluyente.</p>
+            <p id="invoiceReviewNote" class="invoice-note" hidden>Una o más casillas de pago o importes necesitan revisión. El saldo no se presenta como concluyente.</p>
             <p id="invoiceReportNote" class="invoice-note" hidden>Una o más asignaciones REALIZADO tienen pendiente completar su reporte documental.</p>
             <p class="muted-text">La casilla de pago es un estado administrativo del Sheet; no verifica transferencias bancarias.</p>
           </div>
@@ -313,7 +313,8 @@
           </dl>
         </div>
         <div class="invoice-controls" aria-label="Acciones del invoice">
-          <button id="printInvoice" class="button primary" type="button">Imprimir o guardar como PDF</button>
+          <button id="downloadInvoicePdf" class="button primary" type="button">Descargar borrador PDF</button>
+          <button id="printInvoice" class="button" type="button">Imprimir vista previa</button>
           <button id="driveOnly" class="button" type="button" disabled title="La integración segura con Drive no está configurada">Regenerar · solo actualizar en Drive</button>
           <button id="driveAndResend" class="button" type="button" disabled title="La integración segura con Drive y correo no está configurada">Regenerar · actualizar en Drive y reenviar al técnico</button>
           <button id="retryEmailOnly" class="button secondary" type="button" disabled title="El servicio de correo todavía no está configurado">Reintentar solo el envío</button>

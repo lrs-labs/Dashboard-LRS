@@ -76,3 +76,12 @@ test("unknown flags block a conclusive invoice balance while retaining known pai
   assert.equal(invoice.review, 180);
   assert.equal(invoice.reviewCount, 1);
 });
+
+test("an unreadable slot amount blocks the invoice total instead of turning it into zero", () => {
+  const lines = buildLines([row({ amountTP: "??", paidTP: false, ta1: "", amountTA1: 0 })]);
+  const invoice = buildPayrollInvoice(lines, "Tech Fixture A", "2026-10-Q1", PayrollCore);
+  assert.equal(invoice.total, null);
+  assert.equal(invoice.knownTotal, 0);
+  assert.equal(invoice.amountReviewCount, 1);
+  assert.equal(invoice.balance, null);
+});

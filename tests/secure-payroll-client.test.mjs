@@ -189,3 +189,35 @@ test("a late response after sign-out cannot restore the old table", async () => 
   assert.equal(client.getState().status, "signed_out");
   assert.equal(client.getState().rows, null);
 });
+
+test("a private session expires after its fixed lease, revokes auth, and clears cached payroll keys", async () => {
+  let now = 100_000, scheduled;
+  const auth = fakeAuth({ access_token: "signed-user-token" });
+  const oldData = memoryStorage({ "opsdash3:data": "old payroll" });
+  const sessionStorage = memoryStorage();
+  const client = createSecurePayrollClient({ config, authClient: auth, storage: oldData, sessionStorage,
+    now: () => now, maxSessionAgeMs: 500,
+    schedule: (callback, delay) => { scheduled = { callback, delay }; return scheduled; }, cancel: () => {},
+    fetcher: async () => okResponse({ schema: 1, rows: [{ date: "2026-10-07", tp: "Fixture Tech", amountTP: 10 }] }) });
+  const ready = await client.start();
+  assert.equal(ready.status, "ready");
+  assert.equal(scheduled.delay, 500);
+  now += 500;
+  scheduled.callback();
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(client.getState().status, "signed_out");
+  assert.match(client.getState().message, /sesión privada expiró/i);
+  assert.equal(client.getState().rows, null);
+  assert.equal(auth.calls.signOut, 1);
+  assert.equal(oldData.getItem("opsdash3:data"), null);
+  assert.equal(sessionStorage.getItem("lrs.private.session.started-at"), null);
+});
+
+test("server-reported expiration signs out instead of leaving a refreshable session active", async () => {
+  const auth = fakeAuth({ access_token: "expired-token" });
+  const client = createSecurePayrollClient({ config, authClient: auth, sessionStorage: memoryStorage(), fetcher: async () => okResponse({}, 401) });
+  const state = await client.start();
+  assert.equal(state.status, "signed_out");
+  assert.equal(auth.calls.signOut, 1);
+});

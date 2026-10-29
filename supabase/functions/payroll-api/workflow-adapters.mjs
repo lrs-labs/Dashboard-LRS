@@ -31,12 +31,20 @@ function validateSnapshot(snapshot) {
   }
   return snapshot;
 }
+
+export function validateClosedPayrollSnapshot(snapshot) {
+  return validateSnapshot(snapshot);
+}
 async function digestPayload(value) {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return [...digest].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
-async function executeIdempotent({ jobs, audit, key, type, periodKey, identityRef, payload, origin = "user", execute }) {
+async function digestBytes(bytes) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return [...digest].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+async function executeIdempotent({ jobs, audit, key, type, periodKey, identityRef, payload, origin = "user", actorId = null, execute, now = new Date() }) {
   requireAdapter(jobs, "get");
   requireAdapter(jobs, "insertQueued");
   requireAdapter(jobs, "transition");
@@ -44,25 +52,93 @@ async function executeIdempotent({ jobs, audit, key, type, periodKey, identityRe
   const digest = await digestPayload(payload);
   const prior = await jobs.get(key);
   const decision = classifyWorkflowAttempt({ idempotencyKey: key, jobType: type, requestDigest: digest, existing: prior });
-  if (decision.decision !== "enqueue") return { state: decision.state || decision.decision, reason: decision.reason || null, replay: true };
-  const inserted = await jobs.insertQueued({ idempotency_key: key, job_type: type, period_key: periodKey, request_digest: digest });
+  const auditEvent = { idempotencyKey: key, origin, actorId, action: type, entityType: type, entityRef: identityRef, periodKey, outcome: "succeeded" };
+  if (decision.decision === "return_existing_result") {
+    let auditPending = false;
+    try { await audit.record(auditEvent); } catch (_) { auditPending = true; }
+    return { state: "succeeded", result: prior.result_payload ?? null, replay: true, auditPending };
+  }
+  if (decision.decision !== "enqueue") {
+    const state = ["running", "unknown", "needs_review"].includes(prior?.state)
+      ? "reconcile_required"
+      : decision.state || decision.decision;
+    return { state, reason: decision.reason || null, replay: true };
+  }
+  const leaseExpiresAt = new Date(new Date(now).getTime() + 120_000).toISOString();
+  const inserted = await jobs.insertQueued({
+    idempotency_key: key, job_type: type, period_key: periodKey, request_digest: digest,
+    technician_id: payload.technicianId || null,
+    source_snapshot_ref: payload.snapshotId || null,
+    requested_by: actorId, lease_expires_at: leaseExpiresAt
+  });
   if (!inserted) {
     const raced = await jobs.get(key);
+    if (!raced && type === "invoice_email" && typeof jobs.findUnresolvedEmail === "function") {
+      const unresolved = await jobs.findUnresolvedEmail({ periodKey, technicianId: payload.technicianId });
+      if (Array.isArray(unresolved) && unresolved.length) {
+        return { state: "reconcile_required", reason: "previous_email_outcome_unresolved", replay: true };
+      }
+    }
     const afterRace = classifyWorkflowAttempt({ idempotencyKey: key, jobType: type, requestDigest: digest, existing: raced });
-    return { state: afterRace.state || afterRace.decision, reason: afterRace.reason || "concurrent_job", replay: true };
+    return { state: raced?.state === "running" ? "reconcile_required" : afterRace.state || afterRace.decision, reason: afterRace.reason || "concurrent_job", replay: true };
   }
-  await jobs.transition(key, "running");
   try {
-    const result = await execute();
-    await jobs.transition(key, "succeeded", { result_code: "ok" });
-    await audit.record({ idempotencyKey: key, origin, action: type, entityType: type, entityRef: identityRef, periodKey, outcome: "succeeded" });
-    return { state: "succeeded", result, idempotencyKey: key };
+    await jobs.transition(key, "running", { started_at: new Date(now).toISOString(), lease_expires_at: leaseExpiresAt }, { expectedState: "queued" });
+  } catch (_) {
+    return { state: "queued", reason: "job_start_persistence_failed", idempotencyKey: key };
+  }
+  let result;
+  try {
+    result = await execute();
   } catch (error) {
     const state = error?.outcomeUnknown === true ? "unknown" : "failed";
-    await jobs.transition(key, state, { result_code: state });
-    await audit.record({ idempotencyKey: key, origin, action: type, entityType: type, entityRef: identityRef, periodKey, outcome: state });
+    try { await jobs.transition(key, state, { result_code: state, completed_at: new Date(now).toISOString() }, { expectedState: "running" }); } catch (_) { /* A running job is reconciled; it is never retried automatically. */ }
+    try { await audit.record({ ...auditEvent, outcome: state }); } catch (_) { /* Audit repair is separate from provider retry. */ }
     return { state, reason: "operation_failed", idempotencyKey: key };
   }
+  try {
+    await jobs.transition(key, "succeeded", { result_code: "ok", result_payload: result, completed_at: new Date(now).toISOString() }, { expectedState: "running" });
+  } catch (_) {
+    try { await jobs.transition(key, "unknown", { result_code: "provider_succeeded_result_unpersisted", completed_at: new Date(now).toISOString() }, { expectedState: "running" }); } catch (_) { /* The running record remains reconciliation-only. */ }
+    return { state: "reconcile_required", reason: "provider_succeeded_result_persistence_failed", idempotencyKey: key };
+  }
+  let auditPending = false;
+  try { await audit.record(auditEvent); } catch (_) { auditPending = true; }
+  return { state: "succeeded", result, idempotencyKey: key, auditPending };
+}
+
+export async function reconcileWorkflowAttempt({ jobs, audit, idempotencyKey, jobType, requestDigest, lookupProviderResult, auditEvent, now = new Date() }) {
+  requireAdapter(jobs, "get");
+  requireAdapter(jobs, "transition");
+  requireAdapter(lookupProviderResult, "lookup");
+  const current = await jobs.get(idempotencyKey);
+  const decision = classifyWorkflowAttempt({ idempotencyKey, jobType, requestDigest, existing: current });
+  if (!current || !["running", "unknown", "needs_review"].includes(current.state)) {
+    return { state: decision.state || decision.decision, replay: true, result: current?.result_payload ?? null };
+  }
+  let provider;
+  try { provider = await lookupProviderResult.lookup({ idempotencyKey, job: current }); }
+  catch (_) { return { state: "reconcile_required", reason: "provider_lookup_failed", replay: true }; }
+  if (provider?.state === "succeeded" && provider.result) {
+    await jobs.transition(idempotencyKey, "succeeded", {
+      result_code: "reconciled",
+      result_payload: provider.result,
+      reconciled_at: new Date(now).toISOString()
+    }, { reconciled: true, expectedState: current.state });
+    if (audit && auditEvent) {
+      try { await audit.record({ ...auditEvent, outcome: "succeeded" }); }
+      catch (_) { return { state: "succeeded", result: provider.result, replay: true, auditPending: true }; }
+    }
+    return { state: "succeeded", result: provider.result, replay: true, reconciled: true };
+  }
+  if (provider?.state === "not_performed" && provider.definitive === true) {
+    await jobs.transition(idempotencyKey, "failed", {
+      result_code: "provider_confirmed_not_performed",
+      reconciled_at: new Date(now).toISOString()
+    }, { reconciled: true, expectedState: current.state });
+    return { state: "failed", reason: "provider_confirmed_not_performed", replay: true };
+  }
+  return { state: "reconcile_required", reason: "provider_outcome_unsettled", replay: true };
 }
 
 function invoiceNames(snapshot, technicianId, technicianName) {
@@ -76,7 +152,7 @@ function invoiceNames(snapshot, technicianId, technicianName) {
   return { fileName, folderPath: `NOMINAS/${year}/${MONTHS[month - 1]}/${safeName}`, technicianId };
 }
 
-export async function archiveClosedInvoice({ snapshot: rawSnapshot, technicianId, technicianName, pdfBytes, freshSourceRevision, drive, jobs, audit }) {
+export async function archiveClosedInvoice({ snapshot: rawSnapshot, technicianId, technicianName, pdfBytes, freshSourceRevision, drive, jobs, audit, actorId = null }) {
   const snapshot = validateSnapshot(rawSnapshot);
   if (freshSourceRevision !== snapshot.sourceRevision) throw new TypeError("source_changed_since_snapshot_review_required");
   if (!(pdfBytes instanceof Uint8Array) || pdfBytes.length < 5 || String.fromCharCode(...pdfBytes.slice(0, 5)) !== "%PDF-") {
@@ -86,11 +162,12 @@ export async function archiveClosedInvoice({ snapshot: rawSnapshot, technicianId
   requireAdapter(drive, "findCurrentInvoice");
   const identity = { jobType: "invoice_drive", periodKey: snapshot.periodKey, technicianId, version: snapshot.sourceRevision };
   const key = await makeWorkflowIdempotencyKey(identity);
-  const payload = { ...identity, snapshotId: snapshot.id, pdfSha256: await digestPayload([...pdfBytes]) };
+  const pdfSha256 = await digestBytes(pdfBytes);
+  const payload = { ...identity, snapshotId: snapshot.id, pdfSha256 };
   const names = invoiceNames(snapshot, technicianId, technicianName);
   return executeIdempotent({
     jobs, audit, key, type: "invoice_drive", periodKey: snapshot.periodKey,
-    identityRef: `${snapshot.id}:${technicianId}`, payload,
+    identityRef: `${snapshot.id}:${technicianId}`, payload, actorId,
     execute: async () => {
       const current = await drive.findCurrentInvoice({ technicianId, periodKey: snapshot.periodKey });
       if (current) {
@@ -101,7 +178,11 @@ export async function archiveClosedInvoice({ snapshot: rawSnapshot, technicianId
           metadata: { periodKey: snapshot.periodKey, technicianId, snapshotId: snapshot.id, sourceRevision: snapshot.sourceRevision }
         });
         if (!replaced?.fileId || replaced.fileId !== current.fileId || !replaced.revisionId) throw new Error("drive_replace_unverified");
-        return { fileId: replaced.fileId, revisionId: replaced.revisionId, fileName: names.fileName, folderPath: names.folderPath, replaced: true };
+        return {
+          state: "stored", fileId: replaced.fileId, revisionId: replaced.revisionId,
+          sourceRevision: snapshot.sourceRevision, snapshotId: snapshot.id, technicianId,
+          periodKey: snapshot.periodKey, pdfSha256, fileName: names.fileName, folderPath: names.folderPath, replaced: true
+        };
       }
       requireAdapter(drive, "createInvoice");
       const created = await drive.createInvoice({
@@ -109,35 +190,80 @@ export async function archiveClosedInvoice({ snapshot: rawSnapshot, technicianId
         metadata: { periodKey: snapshot.periodKey, technicianId, snapshotId: snapshot.id, sourceRevision: snapshot.sourceRevision }
       });
       if (!created?.fileId || !created.revisionId) throw new Error("drive_create_unverified");
-      return { fileId: created.fileId, revisionId: created.revisionId, fileName: names.fileName, folderPath: names.folderPath, replaced: false };
+      return {
+        state: "stored", fileId: created.fileId, revisionId: created.revisionId,
+        sourceRevision: snapshot.sourceRevision, snapshotId: snapshot.id, technicianId,
+        periodKey: snapshot.periodKey, pdfSha256, fileName: names.fileName, folderPath: names.folderPath, replaced: false
+      };
     }
   });
 }
 
-export async function sendVerifiedInvoice({ snapshot: rawSnapshot, technicianId, deliveryAttemptId, pdfBytes, recipientDirectory, mailer, previewVerifier, previewToken, jobs, audit }) {
+export async function sendVerifiedInvoice({ snapshot: rawSnapshot, technicianId, archivedFile, pdfBytes, recipientDirectory, mailer, previewVerifier, previewToken, jobs, audit, actorId = null }) {
   const snapshot = validateSnapshot(rawSnapshot);
   if (!(pdfBytes instanceof Uint8Array) || pdfBytes.length < 5 || String.fromCharCode(...pdfBytes.slice(0, 5)) !== "%PDF-") throw new TypeError("pdf_bytes_required");
   if (!snapshot.lines.some(line => line.technicianId === technicianId)) throw new TypeError("technician_not_in_snapshot");
+  if (!archivedFile || archivedFile.state !== "stored" || typeof archivedFile.fileId !== "string" ||
+      typeof archivedFile.revisionId !== "string" || archivedFile.snapshotId !== snapshot.id ||
+      archivedFile.technicianId !== technicianId || archivedFile.periodKey !== snapshot.periodKey ||
+      archivedFile.sourceRevision !== snapshot.sourceRevision) {
+    throw new TypeError("verified_archived_file_required");
+  }
+  const pdfSha256 = await digestBytes(pdfBytes);
+  if (archivedFile.pdfSha256 !== pdfSha256) throw new TypeError("archived_pdf_content_mismatch");
   requireAdapter(recipientDirectory, "resolve");
   requireAdapter(mailer, "send");
   requireAdapter(previewVerifier, "verify");
+  requireAdapter(jobs, "findUnresolvedEmail");
   const recipient = await recipientDirectory.resolve(technicianId);
-  if (!recipient || recipient.active !== true || recipient.verified !== true || recipient.technicianId !== technicianId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email || "")) {
+  if (!recipient || recipient.active !== true || recipient.verified !== true || recipient.technicianId !== technicianId ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email || "") ||
+      typeof recipient.directoryVersion !== "string" || !recipient.directoryVersion.trim()) {
     throw new TypeError("verified_recipient_required");
   }
   const approval = await previewVerifier.verify({
     token: previewToken, periodKey: snapshot.periodKey, sourceRevision: snapshot.sourceRevision,
-    technicianId, recipientDirectoryId: recipient.directoryId, deliveryAttemptId
+    snapshotId: snapshot.id,
+    technicianId,
+    archive: { fileId: archivedFile.fileId, revisionId: archivedFile.revisionId, pdfSha256: archivedFile.pdfSha256 },
+    recipient: { directoryId: recipient.directoryId, directoryVersion: recipient.directoryVersion, email: recipient.email },
+    actorId
   });
-  if (!approval || approval.approved !== true) throw new TypeError("recipient_preview_approval_required");
+  const deliveryAttemptId = approval?.deliveryAttemptId;
+  if (!approval || approval.approved !== true || typeof deliveryAttemptId !== "string" ||
+      !deliveryAttemptId.trim() || approval.binding?.snapshotId !== snapshot.id ||
+      approval.binding?.sourceRevision !== snapshot.sourceRevision ||
+      approval.binding?.technicianId !== technicianId ||
+      approval.binding?.fileId !== archivedFile.fileId ||
+      approval.binding?.revisionId !== archivedFile.revisionId ||
+      approval.binding?.pdfSha256 !== archivedFile.pdfSha256 ||
+      approval.binding?.recipientDirectoryId !== recipient.directoryId ||
+      approval.binding?.directoryVersion !== recipient.directoryVersion ||
+      approval.binding?.recipientEmail !== recipient.email ||
+      approval.binding?.actorId !== actorId) {
+    throw new TypeError("recipient_preview_approval_required");
+  }
   const identity = { jobType: "invoice_email", periodKey: snapshot.periodKey, technicianId, version: snapshot.sourceRevision, deliveryAttemptId };
   const key = await makeWorkflowIdempotencyKey(identity);
-  const payload = { ...identity, recipientId: recipient.directoryId, pdfSha256: await digestPayload([...pdfBytes]) };
+  const payload = {
+    ...identity, recipientId: recipient.directoryId, directoryVersion: recipient.directoryVersion,
+    fileId: archivedFile.fileId, fileRevisionId: archivedFile.revisionId, pdfSha256
+  };
+  const unresolved = await jobs.findUnresolvedEmail({ periodKey: snapshot.periodKey, technicianId });
+  if (!Array.isArray(unresolved)) throw new TypeError("email_job_lookup_invalid");
+  if (unresolved.length) return { state: "reconcile_required", reason: "previous_email_outcome_unresolved", replay: true };
   return executeIdempotent({
     jobs, audit, key, type: "invoice_email", periodKey: snapshot.periodKey,
-    identityRef: `${snapshot.id}:${technicianId}:${deliveryAttemptId}`, payload,
+    identityRef: `${snapshot.id}:${technicianId}:${deliveryAttemptId}`, payload, actorId,
+    origin: "user",
     execute: async () => {
-      const result = await mailer.send({ to: recipient.email, subject: `Invoice de nómina · ${snapshot.periodKey}`, attachment: pdfBytes, idempotencyKey: key });
+      const result = await mailer.send({
+        to: recipient.email, subject: `Invoice de nómina · ${snapshot.periodKey}`,
+        attachment: pdfBytes, idempotencyKey: key,
+        fileName: archivedFile.fileName || `NOMINA-${snapshot.periodKey}.pdf`,
+        archive: { fileId: archivedFile.fileId, revisionId: archivedFile.revisionId, pdfSha256 },
+        recipientDirectoryId: recipient.directoryId
+      });
       if (!result?.messageId) {
         const error = new Error("email_result_unverified");
         error.outcomeUnknown = result?.outcomeUnknown === true;

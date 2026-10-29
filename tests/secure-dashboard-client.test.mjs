@@ -55,3 +55,24 @@ test("dashboard client clears data on sign-out and rejects late results after th
   assert.equal(late.dataset, null);
   assert.ok(removed.length >= 2);
 });
+
+test("dashboard session lease expires and signs out without restoring a cached dashboard", async () => {
+  let now = 100_000, timer;
+  const values = new Map();
+  const sessionStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
+  const auth = authClient(), removed = [];
+  const client = createSecureDashboardClient({ config, authClient: auth, sessionStorage, getOrigin: () => config.allowedOrigin,
+    storage: { removeItem(key) { removed.push(key); } }, now: () => now, maxSessionAgeMs: 400,
+    schedule: (callback, delay) => { timer = { callback, delay }; return timer; }, cancel: () => {}, fetcher: async () => ok(fixture) });
+  assert.equal((await client.start()).status, "ready");
+  assert.equal(timer.delay, 400);
+  now += 400;
+  timer.callback();
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(client.getState().status, "signed_out");
+  assert.equal(client.getState().dataset, null);
+  assert.match(client.getState().message, /sesión privada expiró/i);
+  assert.equal(values.get("lrs.private.session.started-at"), undefined);
+  assert.deepEqual([...new Set(removed)].sort(), ["opsdash3:data", "opsdash3:tab"]);
+});

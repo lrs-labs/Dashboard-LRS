@@ -1,8 +1,11 @@
+import { createPrivateSessionLease, MAX_PRIVATE_SESSION_AGE_MS } from "./session-lease.mjs";
+
 export const LEGACY_PAYROLL_CACHE_KEYS = Object.freeze(["opsdash3:data", "opsdash3:tab"]);
 
 const MESSAGES = Object.freeze({
   unconfigured: "El acceso privado aún no está configurado. Esta vista no consulta fuentes públicas ni usa datos guardados.",
   signed_out: "Inicia sesión para validar tu acceso a Nómina.",
+  session_expired: "La sesión privada expiró. Inicia sesión de nuevo.",
   authorizing: "Abriendo el inicio de sesión seguro…",
   loading: "Consultando la hoja con tu sesión autorizada…",
   ready: "Datos actualizados desde la hoja.",
@@ -20,6 +23,10 @@ export function clearLegacyPayrollCache(storage) {
   for (const key of LEGACY_PAYROLL_CACHE_KEYS) {
     try { storage.removeItem(key); } catch (_) { /* Storage can be disabled by browser policy. */ }
   }
+}
+
+function browserSessionStorage() {
+  try { return globalThis.sessionStorage; } catch (_) { return null; }
 }
 
 export function validatePrivateRuntime(config, authClient) {
@@ -70,11 +77,15 @@ export async function readPrivatePayroll({ endpoint, publishableKey, accessToken
   }
 }
 
-export function createSecurePayrollClient({ config, authClient, fetcher, storage = globalThis.localStorage, onState = () => {} } = {}) {
+export function createSecurePayrollClient({ config, authClient, fetcher, storage = globalThis.localStorage, sessionStorage = browserSessionStorage(),
+  maxSessionAgeMs = MAX_PRIVATE_SESSION_AGE_MS, now = () => Date.now(), schedule, cancel, onState = () => {} } = {}) {
   let state = { status: "unconfigured", message: MESSAGES.unconfigured, rows: null, readAt: null };
   let authSubscription = null;
   let requestVersion = 0;
   let validated = validatePrivateRuntime(config, authClient);
+  let expiredNotice = false;
+  let expireSession = async () => {};
+  const sessionLease = createPrivateSessionLease({ storage: sessionStorage, now, schedule, cancel, maxAgeMs: maxSessionAgeMs, onExpire: () => { void expireSession(); } });
 
   function publish(status, values = {}) {
     state = { status, message: MESSAGES[status] || MESSAGES.error, rows: null, readAt: null, ...values };
@@ -82,10 +93,19 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
     return state;
   }
 
-  async function loadSession(session) {
+  async function loadSession(session, event = "INITIAL_SESSION") {
     const version = ++requestVersion;
     clearLegacyPayrollCache(storage);
-    if (!session?.access_token) return publish("signed_out");
+    if (!session?.access_token) {
+      sessionLease.stop();
+      return publish("signed_out", expiredNotice ? { message: MESSAGES.session_expired } : {});
+    }
+    if (event === "SIGNED_IN") expiredNotice = false;
+    const lease = sessionLease.begin({ newAuthentication: event === "SIGNED_IN" });
+    if (!lease.ok) {
+      if (lease.reason === "session_expired") return expireSession();
+      return publish("error", { message: "No se pudo iniciar una sesión privada temporal. Vuelve a cargar la página." });
+    }
     publish("loading");
     const result = await readPrivatePayroll({
       endpoint: validated.endpoint,
@@ -94,8 +114,20 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
       fetcher
     });
     if (version !== requestVersion) return state;
+    if (result.state === "signed_out") return expireSession();
     return publish(result.state, { rows: result.rows, readAt: result.readAt || null });
   }
+
+  expireSession = async () => {
+    expiredNotice = true;
+    requestVersion++;
+    sessionLease.stop();
+    clearLegacyPayrollCache(storage);
+    try { await authClient?.auth?.signOut?.(); } catch (_) { /* Local view stays cleared even if remote logout is unavailable. */ }
+    requestVersion++;
+    clearLegacyPayrollCache(storage);
+    return publish("signed_out", { message: MESSAGES.session_expired });
+  };
 
   async function start() {
     clearLegacyPayrollCache(storage);
@@ -103,8 +135,8 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
     if (!validated.ok) return publish("unconfigured");
 
     if (!authSubscription && typeof authClient.auth.onAuthStateChange === "function") {
-      const subscriptionResult = authClient.auth.onAuthStateChange((_event, session) => {
-        void loadSession(session);
+      const subscriptionResult = authClient.auth.onAuthStateChange((event, session) => {
+        void loadSession(session, event);
       });
       authSubscription = subscriptionResult?.data?.subscription || subscriptionResult?.subscription || null;
     }
@@ -121,6 +153,8 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
 
   async function signIn() {
     clearLegacyPayrollCache(storage);
+    expiredNotice = false;
+    sessionLease.stop();
     if (!validated.ok || typeof authClient.auth.signInWithOAuth !== "function") return publish("unconfigured");
     const origin = globalThis.location?.origin;
     if (origin !== config.allowedOrigin) return publish("unconfigured");
@@ -156,6 +190,8 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
 
   async function signOut() {
     requestVersion++;
+    expiredNotice = false;
+    sessionLease.stop();
     clearLegacyPayrollCache(storage);
     publish("signing_out");
     try {
@@ -171,6 +207,7 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
       return publish("error");
     } finally {
       requestVersion++;
+      sessionLease.stop();
       clearLegacyPayrollCache(storage);
       if (state.status === "signing_out") publish("signed_out");
     }
@@ -179,6 +216,7 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
 
   function dispose() {
     requestVersion++;
+    sessionLease.stop();
     authSubscription?.unsubscribe?.();
     authSubscription = null;
     clearLegacyPayrollCache(storage);

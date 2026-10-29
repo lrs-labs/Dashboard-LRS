@@ -1,6 +1,9 @@
 import { withSupabase } from "npm:@supabase/server@1";
-import { authorizeDashboardRead, authorizePayrollRead, isAllowedOrigin } from "./policy.mjs";
+import { isAllowedOrigin } from "./policy.mjs";
 import { createPayrollBridgeEnvelope, DASHBOARD_BRIDGE_ACTION, PAYROLL_BRIDGE_ACTION, validatePayrollBridgeUrl } from "./hmac-bridge.mjs";
+import { dispatchPayrollCommand } from "./command-router.mjs";
+import { createPayrollWorkflowHandler } from "./workflow-http.mjs";
+import { createSupabaseWorkflowStore } from "./supabase-workflow-store.mjs";
 
 const ALLOWED_ORIGIN = Deno.env.get("APP_ORIGIN") || "";
 const NO_STORE = "no-store, private, max-age=0";
@@ -64,30 +67,36 @@ const authenticatedHandler = withSupabase({ auth: "user" }, async (request, ctx)
     const user = userResult?.user;
     if (userError || !user?.id || !(user.email_confirmed_at || user.confirmed_at)) return response({ error: "authentication_required" }, 401);
     const access = await accessForUser(ctx, user.id);
+    // Jobs and audit use server-only RPCs, but effects remain disabled until a
+    // frozen Sheet snapshot and approved Google adapters are configured.
+    const workflowStore = createSupabaseWorkflowStore(ctx.supabaseAdmin);
+    const payrollWorkflow = createPayrollWorkflowHandler({ enabled: false, ...workflowStore });
     const rawBody = await request.text();
     if (rawBody.length > 1024) return response({ error: "request_too_large" }, 413);
     let body: Record<string, unknown> | null = null;
     try { body = JSON.parse(rawBody); } catch { body = null; }
-    if (!body || !["payroll.read", "dashboard.read"].includes(String(body.action)) || Object.keys(body).some(key => key !== "action")) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return response({ error: "invalid_request" }, 400);
     }
-    if (body.action === "payroll.read") {
-      const authorization = authorizePayrollRead(access);
-      if (!authorization.ok) return response({ error: authorization.reason }, 403);
-      const payload = await readGoogleBridge(PAYROLL_BRIDGE_ACTION);
-      if (payload.rows.length > 20000) return response({ error: "payroll_payload_too_large" }, 502);
-      return response({ schema: 1, readAt: new Date().toISOString(), rows: payload.rows });
-    }
-    const dashboardAuthorization = authorizeDashboardRead(access);
-    if (!dashboardAuthorization.ok) return response({ error: dashboardAuthorization.reason }, 403);
-    const payload = await readGoogleBridge(DASHBOARD_BRIDGE_ACTION);
-    if (payload.rows.length > 20000 || payload.tabCells.length > 13000) {
-      return response({ error: "dashboard_payload_too_large" }, 502);
-    }
-    // Dashboard, tabulator and calculator data are served together only to an
-    // active all-scope user. The source has no stable technician IDs yet, so
-    // selected-scope requests fail closed before this Google read occurs.
-    return response({ schema: 1, readAt: new Date().toISOString(), rows: payload.rows, tabCells: payload.tabCells });
+    const dispatched = await dispatchPayrollCommand({
+      body,
+      access,
+      actorId: user.id,
+      workflow: payrollWorkflow,
+      readPayroll: async () => {
+        const payload = await readGoogleBridge(PAYROLL_BRIDGE_ACTION);
+        if (payload.rows.length > 20000) throw new Error("payroll_payload_too_large");
+        return { readAt: new Date().toISOString(), rows: payload.rows };
+      },
+      readDashboard: async () => {
+        const payload = await readGoogleBridge(DASHBOARD_BRIDGE_ACTION);
+        if (payload.rows.length > 20000 || payload.tabCells.length > 13000) throw new Error("dashboard_payload_too_large");
+        // Dashboard, tabulator and calculator data are served together only to
+        // active all-scope users until source rows have stable technician IDs.
+        return { readAt: new Date().toISOString(), rows: payload.rows, tabCells: payload.tabCells };
+      }
+    });
+    return response(dispatched.body, dispatched.status);
   } catch (error) {
     const message = error instanceof Error ? error.message : "request_failed";
     const status = message === "google_payroll_bridge_not_configured" ? 503 : 500;

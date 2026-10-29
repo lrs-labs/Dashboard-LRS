@@ -1,7 +1,8 @@
 import { createSecureDashboardClient } from "./secure-dashboard-client.mjs";
+import { createPrivateAuthRuntime } from "./private-auth-runtime.mjs";
 import { calculateHourlyComparison, filterDashboardRows, normalizeDashboardRows, parseSecureTabulator, summarizeDashboardRows } from "./private-dashboard-view.mjs";
 
-const runtime = globalThis.LRS_PRIVATE_PAYROLL_RUNTIME || {};
+const runtime = createPrivateAuthRuntime(globalThis.LRS_PRIVATE_PAYROLL_RUNTIME || {});
 const $ = id => document.getElementById(id);
 const workspace = $("workspace");
 const accessMessage = $("accessMessage");
@@ -162,7 +163,7 @@ function renderState(state) {
   }
 }
 
-const controller = createSecureDashboardClient({ config: runtime.config, authClient: runtime.authClient, fetcher: globalThis.fetch?.bind(globalThis), onState: renderState });
+const controller = createSecureDashboardClient({ config: runtime.config, authClient: runtime.authClient, sessionStorage: runtime.sessionStorage, fetcher: globalThis.fetch?.bind(globalThis), onState: renderState });
 for (const id of ["yearFilter", "monthFilter", "statusFilter", "activityFilter", "technicianFilter"]) $(id).addEventListener("change", renderDashboard);
 $("searchFilter").addEventListener("input", renderDashboard);
 $("hoursInput").addEventListener("input", renderCalculator);
