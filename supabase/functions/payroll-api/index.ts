@@ -1,7 +1,7 @@
 import { withSupabase } from "npm:@supabase/server@1";
-import { authorizePayrollRead, mapPayrollRanges } from "./policy.mjs";
+import { authorizePayrollRead, isAllowedOrigin, mapPayrollRanges } from "./policy.mjs";
 
-const ALLOWED_ORIGIN = Deno.env.get("APP_ORIGIN") || "https://lrsbyor.github.io";
+const ALLOWED_ORIGIN = Deno.env.get("APP_ORIGIN") || "";
 const NO_STORE = "no-store, private, max-age=0";
 const GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token";
 const SHEET_RANGES = ["REGISTRO_CASOS!B3:B", "REGISTRO_CASOS!F3:H", "REGISTRO_CASOS!J3:K", "REGISTRO_CASOS!P3:P", "REGISTRO_CASOS!U3:W", "REGISTRO_CASOS!X3:Z", "REGISTRO_CASOS!AF3:AH", "REGISTRO_CASOS!AI3:AI", "REGISTRO_CASOS!AO3:AO"];
@@ -84,7 +84,7 @@ async function readPayrollRows() {
 
 const authenticatedHandler = withSupabase({ auth: "user" }, async (request, ctx) => {
   const origin = request.headers.get("origin") || "";
-  if (origin !== ALLOWED_ORIGIN) return response({ error: "origin_not_allowed" }, 403, "null");
+  if (!isAllowedOrigin(ALLOWED_ORIGIN, origin)) return response({ error: "origin_not_allowed" }, 403, "null");
   if (request.method !== "POST") return response({ error: "method_not_allowed" }, 405);
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > 1024) return response({ error: "request_too_large" }, 413);
@@ -116,7 +116,7 @@ const authenticatedHandler = withSupabase({ auth: "user" }, async (request, ctx)
 
 Deno.serve(async request => {
   const origin = request.headers.get("origin") || "";
-  if (origin !== ALLOWED_ORIGIN) return response({ error: "origin_not_allowed" }, 403, "null");
+  if (!isAllowedOrigin(ALLOWED_ORIGIN, origin)) return response({ error: "origin_not_allowed" }, 403, "null");
   if (request.method === "OPTIONS") return new Response(null, {
     status: 204,
     headers: {
@@ -127,5 +127,12 @@ Deno.serve(async request => {
       "vary": "Origin"
     }
   });
-  return authenticatedHandler(request);
+  const result = await authenticatedHandler(request);
+  const headers = new Headers(result.headers);
+  headers.set("access-control-allow-origin", ALLOWED_ORIGIN);
+  headers.set("access-control-allow-headers", "authorization, apikey, content-type");
+  headers.set("access-control-allow-methods", "POST, OPTIONS");
+  headers.set("vary", "Origin");
+  headers.set("cache-control", NO_STORE);
+  return new Response(result.body, { status: result.status, statusText: result.statusText, headers });
 });
