@@ -1,3 +1,4 @@
+import { withSupabase } from "npm:@supabase/server@1";
 import { authorizePayrollRead, mapPayrollRanges } from "./policy.mjs";
 
 const ALLOWED_ORIGIN = Deno.env.get("APP_ORIGIN") || "https://lrsbyor.github.io";
@@ -58,32 +59,10 @@ async function googleAccessToken(serviceAccount: { client_email: string; private
   return token.access_token as string;
 }
 
-async function verifiedUser(request: Request) {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const authorization = request.headers.get("authorization") || "";
-  if (!supabaseUrl || !anonKey || !/^Bearer\s+[^\s]+$/i.test(authorization)) return null;
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: { apikey: anonKey, authorization }
-  });
-  if (!userResponse.ok) return null;
-  const user = await userResponse.json();
-  if (!user?.id || !(user.email_confirmed_at || user.confirmed_at)) return null;
-  return user;
-}
-
-async function accessForUser(userId: string) {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceKey) throw new Error("authorization_service_not_configured");
-  const result = await fetch(`${supabaseUrl}/rest/v1/rpc/lrs_get_user_access`, {
-    method: "POST",
-    headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ p_user_id: userId })
-  });
-  if (!result.ok) throw new Error("authorization_lookup_failed");
-  const rows = await result.json();
-  return Array.isArray(rows) ? rows[0] || null : null;
+async function accessForUser(ctx: { supabaseAdmin: { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> } }, userId: string) {
+  const { data, error } = await ctx.supabaseAdmin.rpc("lrs_get_user_access", { p_user_id: userId });
+  if (error) throw new Error("authorization_lookup_failed");
+  return Array.isArray(data) ? data[0] || null : null;
 }
 
 async function readPayrollRows() {
@@ -103,27 +82,18 @@ async function readPayrollRows() {
   return mapPayrollRanges(payload.valueRanges || []);
 }
 
-Deno.serve(async request => {
+const authenticatedHandler = withSupabase({ auth: "user" }, async (request, ctx) => {
   const origin = request.headers.get("origin") || "";
   if (origin !== ALLOWED_ORIGIN) return response({ error: "origin_not_allowed" }, 403, "null");
-  if (request.method === "OPTIONS") return new Response(null, {
-    status: 204,
-    headers: {
-      "access-control-allow-origin": ALLOWED_ORIGIN,
-      "access-control-allow-headers": "authorization, apikey, content-type",
-      "access-control-allow-methods": "POST, OPTIONS",
-      "access-control-max-age": "600",
-      "vary": "Origin"
-    }
-  });
   if (request.method !== "POST") return response({ error: "method_not_allowed" }, 405);
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > 1024) return response({ error: "request_too_large" }, 413);
 
   try {
-    const user = await verifiedUser(request);
-    if (!user) return response({ error: "authentication_required" }, 401);
-    const access = await accessForUser(user.id);
+    const { data: userResult, error: userError } = await ctx.supabase.auth.getUser();
+    const user = userResult?.user;
+    if (userError || !user?.id || !(user.email_confirmed_at || user.confirmed_at)) return response({ error: "authentication_required" }, 401);
+    const access = await accessForUser(ctx, user.id);
     const authorization = authorizePayrollRead(access);
     if (!authorization.ok) return response({ error: authorization.reason }, 403);
 
@@ -142,4 +112,20 @@ Deno.serve(async request => {
     const status = message === "google_sheets_read_integration_not_configured" ? 503 : 500;
     return response({ error: status === 503 ? message : "payroll_read_unavailable" }, status);
   }
+});
+
+Deno.serve(async request => {
+  const origin = request.headers.get("origin") || "";
+  if (origin !== ALLOWED_ORIGIN) return response({ error: "origin_not_allowed" }, 403, "null");
+  if (request.method === "OPTIONS") return new Response(null, {
+    status: 204,
+    headers: {
+      "access-control-allow-origin": ALLOWED_ORIGIN,
+      "access-control-allow-headers": "authorization, apikey, content-type",
+      "access-control-allow-methods": "POST, OPTIONS",
+      "access-control-max-age": "600",
+      "vary": "Origin"
+    }
+  });
+  return authenticatedHandler(request);
 });
