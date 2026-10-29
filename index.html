@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DASHBOARD - DPTO TECNICO</title>
 <script>(function(){try{var t=localStorage.getItem("opsdash3:theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+<script src="./payroll-core.js"></script>
 <style>
 :root{
   color-scheme: light;
@@ -60,6 +61,8 @@ button,select,input{font:inherit; color:inherit; letter-spacing:inherit}
 .seg.nav .t-tab{color:var(--orange); background:color-mix(in srgb, var(--orange) 14%, transparent)}
 .seg.nav .t-dash[aria-selected="true"]{background:var(--blue); color:#fff; box-shadow:0 2px 8px color-mix(in srgb, var(--blue) 40%, transparent)}
 .seg.nav .t-tab[aria-selected="true"]{background:var(--orange); color:#fff; box-shadow:0 2px 8px color-mix(in srgb, var(--orange) 40%, transparent)}
+.seg.nav .t-payroll{color:var(--green); background:color-mix(in srgb, var(--green) 10%, transparent)}
+.seg.nav .t-payroll[aria-selected="true"]{background:var(--green); color:#fff; box-shadow:0 2px 8px color-mix(in srgb, var(--green) 38%, transparent)}
 .theme{position:relative; width:64px; height:32px; border-radius:999px; border:1px solid var(--line2); background:var(--card3); cursor:pointer; padding:0; flex:none; transition:background .2s, border-color .2s; box-shadow:inset 0 1px 2px rgba(0,0,0,.08)}
 .theme:hover{border-color:var(--muted)}
 .theme .ico{position:absolute; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--muted); transition:opacity .2s, color .2s}
@@ -452,6 +455,85 @@ footer h3{font-size:12px; color:var(--muted); margin-bottom:6px} footer ul{margi
 html[data-device="phone"] .rank .rl{max-width:34vw}
 html[data-touch="1"] .chip, html[data-touch="1"] .btn, html[data-touch="1"] select, html[data-touch="1"] input[type="search"]{min-height:38px}
 @media print{ body{background:#fff} .filters,.databar,.panel,.topbar .seg{display:none} .card,.kpi{break-inside:avoid; box-shadow:none} .tablewrap{max-height:none} }
+#payrollPrintView{display:none}
+.payroll-head{display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-top:14px}
+.payroll-head h2{font-size:25px; letter-spacing:-.03em}
+.payroll-head .hint{max-width:76ch; margin-top:5px}
+.payroll-eyebrow{font-size:11px; color:var(--green); letter-spacing:.09em; text-transform:uppercase; font-weight:700; margin-bottom:5px}
+.payroll-head .actions{display:flex; align-items:center; gap:8px; flex:none}
+.payroll-note{margin-top:12px; padding:12px 15px; border:1px solid color-mix(in srgb,var(--green) 26%,var(--line)); border-radius:13px; background:color-mix(in srgb,var(--green) 7%,var(--card)); color:var(--ink2); font-size:12.5px}
+.payroll-note b{color:var(--ink)}
+.payroll-filters{display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:10px 12px; margin-top:12px; padding:14px 16px; background:var(--card); border-radius:15px; box-shadow:var(--shadow)}
+.payroll-filters label{display:flex; flex-direction:column; gap:5px; color:var(--muted); font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase}
+.payroll-filters select,.payroll-filters input{width:100%; min-width:0; height:36px}
+.payroll-filters .filter-actions{display:flex; align-items:flex-end; gap:8px}
+.payroll-state{margin-top:10px; color:var(--ink2); font-size:12px; min-height:18px}
+.payroll-state.error{color:var(--bad-text)}
+.payroll-alerts{display:grid; gap:7px; margin-top:10px}
+.payroll-alert{padding:10px 13px; border-radius:11px; background:color-mix(in srgb,var(--warn) 12%,var(--card)); color:var(--ink2); font-size:12px; border:1px solid color-mix(in srgb,var(--warn) 30%,var(--line))}
+.payroll-alert.error{background:color-mix(in srgb,var(--bad) 9%,var(--card)); border-color:color-mix(in srgb,var(--bad) 28%,var(--line)); color:var(--bad-text)}
+.payroll-kpis{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:12px}
+.payroll-kpi{min-width:0; background:var(--card); padding:14px 16px; border-radius:14px; box-shadow:var(--shadow); border:1px solid var(--line)}
+.payroll-kpi .lab{color:var(--muted); font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase}
+.payroll-kpi .val{margin-top:4px; font-size:24px; font-weight:700; letter-spacing:-.03em; font-variant-numeric:tabular-nums}
+.payroll-kpi .sub{margin-top:2px; color:var(--muted); font-size:11px}
+.payroll-section{margin-top:12px; padding:17px 18px; background:var(--card); border-radius:15px; box-shadow:var(--shadow)}
+.payroll-section-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px}
+.payroll-section-head h3{font-size:16px}
+.payroll-section-head .hint{color:var(--muted); font-size:11.5px; margin-top:3px}
+.payroll-tech-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:10px}
+.payroll-tech{padding:14px 15px; border:1px solid var(--line); border-radius:13px; background:var(--card2); min-width:0}
+.payroll-tech h4{font-size:15px; margin:0 0 8px; overflow-wrap:anywhere}
+.payroll-tech .payroll-tech-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:7px}
+.payroll-tech .payroll-tech-stats span{display:block; color:var(--muted); font-size:9.5px; text-transform:uppercase; letter-spacing:.04em; font-weight:700}
+.payroll-tech .payroll-tech-stats b{display:block; color:var(--ink); font-size:14px; margin-top:2px; font-variant-numeric:tabular-nums}
+.payroll-tech .btn{margin-top:11px; width:100%}
+.payroll-tech .btn:disabled{opacity:.45; cursor:not-allowed}
+.payroll-table{min-width:980px}
+.pay-state{display:inline-flex; align-items:center; padding:3px 8px; border-radius:999px; font-size:10.5px; font-weight:700; white-space:nowrap; background:var(--card3); color:var(--ink2)}
+.pay-state.paid{background:color-mix(in srgb,var(--ok) 15%,var(--card)); color:var(--ok-text)}
+.pay-state.unpaid{background:color-mix(in srgb,var(--warn) 18%,var(--card)); color:var(--ink2)}
+.pay-state.review{background:color-mix(in srgb,var(--bad) 12%,var(--card)); color:var(--bad-text)}
+.payroll-warning{display:block; color:var(--bad-text); font-size:10.5px; margin-top:3px; max-width:26ch}
+.payroll-muted{color:var(--muted); font-size:11px}
+.payroll-num{font-variant-numeric:tabular-nums; white-space:nowrap}
+@media (max-width:760px){
+  .payroll-head{flex-direction:column; align-items:stretch}
+  .payroll-head .actions .btn-primary{width:100%; margin:0}
+  .payroll-kpis{grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px}
+  .payroll-kpi{padding:11px 12px}
+  .payroll-kpi .val{font-size:20px}
+  .payroll-filters{grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px}
+  .payroll-filters label{min-width:0}
+  .payroll-filters label:nth-last-of-type(1){grid-column:1/-1}
+  .payroll-filters .filter-actions{grid-column:1/-1}
+  .payroll-filters .filter-actions button{flex:1}
+  .payroll-section{padding:14px 12px}
+  .payroll-section-head{flex-direction:column}
+}
+@media (max-width:380px){.payroll-kpis{grid-template-columns:1fr 1fr}.payroll-tech .payroll-tech-stats{grid-template-columns:1fr 1fr}}
+@media print{
+  @page{size:letter; margin:13mm}
+  body.print-payroll{background:#fff!important; color:#1d1d1f!important}
+  body.print-payroll> :not(#payrollPrintView){display:none!important}
+  body.print-payroll> *{visibility:hidden!important}
+  body.print-payroll #payrollPrintView,body.print-payroll #payrollPrintView *{visibility:visible!important}
+  body.print-payroll #payrollPrintView{display:block!important; position:relative; width:100%; padding:0; margin:0; background:#fff!important; color:#1d1d1f!important; font:10.5pt/1.4 Arial,sans-serif}
+  #payrollPrintView h1{font-size:21pt; margin:0 0 3mm; letter-spacing:-.02em}
+  #payrollPrintView h2{font-size:12pt; margin:7mm 0 2mm}
+  #payrollPrintView .invoice-meta{display:grid; grid-template-columns:1fr 1fr; gap:2mm 8mm; border-top:1px solid #d4d4d8; border-bottom:1px solid #d4d4d8; padding:3mm 0; margin:4mm 0}
+  #payrollPrintView .invoice-label{color:#626268; font-size:8.5pt; text-transform:uppercase; letter-spacing:.04em}
+  #payrollPrintView .invoice-totalbox{display:grid; grid-template-columns:1fr auto; gap:1.5mm 8mm; max-width:92mm; margin:6mm 0 0 auto; padding-top:3mm; border-top:1px solid #d4d4d8; font-variant-numeric:tabular-nums}
+  #payrollPrintView .invoice-totalbox .grand{font-size:13pt; font-weight:700; border-top:1px solid #d4d4d8; padding-top:2mm; margin-top:1mm}
+  #payrollPrintView .invoice-note{margin-top:5mm; padding:3mm; border:1px solid #d4d4d8; color:#4c4c50; font-size:8.5pt}
+  #payrollPrintView table{width:100%; border-collapse:collapse; font-size:8.5pt}
+  #payrollPrintView thead{display:table-header-group}
+  #payrollPrintView th,#payrollPrintView td{padding:2.2mm 1.8mm; border-bottom:1px solid #dedee2; vertical-align:top; text-align:left}
+  #payrollPrintView th{background:#f2f2f4!important; color:#333; font-weight:700; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  #payrollPrintView td.num,#payrollPrintView th.num{text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums}
+  #payrollPrintView tr{break-inside:avoid; page-break-inside:avoid}
+  #payrollPrintView .invoice-line-note{font-size:7.7pt; color:#6b6b70; margin-top:1mm}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
 
 </style>
@@ -480,6 +562,7 @@ html[data-touch="1"] .chip, html[data-touch="1"] .btn, html[data-touch="1"] sele
     <nav class="seg nav" role="tablist" aria-label="Secciones">
       <button role="tab" class="t-dash" aria-selected="true" data-page="dash">Dashboard</button>
       <button role="tab" class="t-tab" aria-selected="false" data-page="tab">Tabulador de precios</button>
+      <button role="tab" class="t-payroll" aria-selected="false" data-page="payroll">NOMINA</button>
     </nav>
   </div>
 
@@ -766,9 +849,49 @@ function doGet(e) {
     <div id="tabPrint"></div>
     <div id="qPrintView"></div>
   </section>
+
+  <!-- ===================== PÁGINA NÓMINA ===================== -->
+  <section class="page" id="pagePayroll" hidden>
+    <div class="payroll-head">
+      <div>
+        <div class="payroll-eyebrow">Pago por asignación real</div>
+        <h2>NOMINA</h2>
+        <div class="hint">Cada técnico conserva sus roles y montos tal como aparecen en REGISTRO_CASOS. El PDF representa la quincena seleccionada y puede reimprimirse con el mismo folio mientras sus datos no cambien.</div>
+      </div>
+      <div class="actions"><button class="btn-primary" id="payrollRefresh" type="button">Actualizar desde Sheet</button></div>
+    </div>
+    <div class="payroll-note"><b>Fuente:</b> lectura directa de REGISTRO_CASOS. X, Y y Z aportan el monto por TP, TA1 y TA2; AF, AG y AH son casillas administrativas por slot, no comprobantes bancarios. El Sheet actual no conserva el origen manual o automático de cada marca. El PDF de esta pestaña abre la impresión del navegador; regenerar no modifica pagos, no archiva el archivo ni lo envía. <b>Automatización pendiente:</b> la regla acordada marca Q1 el día 18 y Q2 el día 3 del mes siguiente (America/New_York), solo desde un snapshot cerrado y congelado con IDs estables; requiere un backend autenticado con idempotencia y auditoría. Drive del Monitoring, envío de email y vista previa de destinatarios tampoco están conectados. El periodo permanece consultable. <b>Visibilidad:</b> esta página y la lectura actual del Sheet son públicas; los importes de nómina mostrados aquí también son visibles para cualquiera con el enlace.</div>
+    <div class="payroll-filters" id="payrollFilters" aria-label="Filtros de nómina">
+      <label>Año<select id="payrollYear"></select></label>
+      <label>Mes<select id="payrollMonth"></select></label>
+      <label>Quincena<select id="payrollHalf"></select></label>
+      <label>Desde<input id="payrollFrom" type="date"></label>
+      <label>Hasta<input id="payrollTo" type="date"></label>
+      <label>Técnico<select id="payrollTech"></select></label>
+      <label>Rol<select id="payrollRole"></select></label>
+      <label>Actividad<select id="payrollActivity"></select></label>
+      <label>CASE<select id="payrollCase"></select></label>
+      <label>Proyecto / cliente<input id="payrollProject" type="search" placeholder="Buscar proyecto o cliente"></label>
+      <label>Estado de pago<select id="payrollPayment"></select></label>
+      <label>Estado del trabajo<select id="payrollJobStatus"></select></label>
+      <div class="filter-actions"><button class="btn" id="payrollReset" type="button">Restablecer</button></div>
+    </div>
+    <div class="payroll-state" id="payrollState" role="status" aria-live="polite">Consultando la hoja…</div>
+    <div class="payroll-alerts" id="payrollAlerts"></div>
+    <div class="payroll-kpis" id="payrollKpis"></div>
+    <section class="payroll-section">
+      <div class="payroll-section-head"><div><h3>Resumen por técnico</h3><div class="hint" id="payrollSummaryHint">Importes por slot, separados en pagado, pendiente y por revisar</div></div></div>
+      <div class="payroll-tech-grid" id="payrollSummary"></div>
+    </section>
+    <section class="payroll-section">
+      <div class="payroll-section-head"><div><h3>Detalle de asignaciones</h3><div class="hint">COMPLETED y REALIZADO son elegibles; EXTERNO no se excluye automáticamente. Las cancelaciones NEW solo cuentan si el slot ya trae un monto. No se reparte el subtotal AE.</div></div><div class="payroll-muted" id="payrollCount"></div></div>
+      <div class="tablewrap" style="max-height:580px; margin-top:0"><table class="payroll-table"><thead><tr><th>Fecha</th><th>Técnico</th><th>Rol</th><th>Proyecto / cliente</th><th>Actividad</th><th>CASE</th><th>Trabajo</th><th class="num">Importe</th><th>Pago</th></tr></thead><tbody id="payrollBody"></tbody></table></div>
+    </section>
+  </section>
 </div>
 
 <div id="tip" role="status" aria-live="polite"></div>
+<div id="payrollPrintView" hidden></div>
 
 <script>
 /* =====================================================================
@@ -810,6 +933,10 @@ const fmt = n => n.toLocaleString("en-US"), money = n => "$" + Math.round(n).toL
 const uniq = (arr,k) => [...new Set(arr.map(r=>r[k]).filter(Boolean))].sort();
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const TODAY = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); })();
+const payrollNowPeriod = PayrollCore.currentNYPeriod();
+let PAYROLL_FILTERS = {year:payrollNowPeriod.year, month:payrollNowPeriod.month, half:payrollNowPeriod.half, from:"", to:"", technician:"", role:"", activity:"", caseName:"", project:"", paymentStatus:"", jobStatus:""};
+let PAYROLL_MODEL = {lines:[], unassigned:[], reviewRows:[], excludedStatus:0};
+let PAYROLL_LOADED = false, PAYROLL_BUSY = false, PAYROLL_ERROR = "", payrollPrinting = false;
 
 function normalize(rows){
   const out = [];
@@ -1000,8 +1127,17 @@ function buildChartSelectors(){
    RENDER
    ===================================================================== */
 function renderHeader(){
-  const sel = [...state.months].sort((a,b)=>a-b);
   const h1 = document.getElementById("h1"), partial = document.getElementById("partial");
+  const rangoWrap = document.getElementById("rangoWrap");
+  if(currentPage === "payroll"){
+    h1.textContent = "NOMINA" + (payrollPeriodSelected() ? " — " + PayrollCore.periodLabel(PAYROLL_FILTERS.year,PAYROLL_FILTERS.month,PAYROLL_FILTERS.half) : "");
+    rangoWrap.hidden = true; partial.hidden = true; return;
+  }
+  if(currentPage === "tab"){
+    h1.textContent = "TABULADOR DE MONTOS"; rangoWrap.hidden = true; partial.hidden = true; return;
+  }
+  rangoWrap.hidden = false;
+  const sel = [...state.months].sort((a,b)=>a-b);
   if(!sel.length || !state.year){ h1.textContent = "ACTIVIDADES"; document.getElementById("rango").textContent = "—"; partial.hidden = true; return; }
   const first = sel[0], last = sel[sel.length-1];
   let titulo = first === last ? plabelL(first) : pkY(first) === pkY(last) ? MES[pkM(first)-1] + " a " + MES[pkM(last)-1] + " " + pkY(first) : MES[pkM(first)-1] + " " + pkY(first) + " a " + MES[pkM(last)-1] + " " + pkY(last);
@@ -1222,6 +1358,139 @@ function loadDataset(rows, source, at){
   document.getElementById("noteStatus").textContent = `Solo se cuentan registros con STATUS = COMPLETED (${fmt(completed.length)} de ${fmt(ALL.length)} con fecha; ${fmt(META.excluded)} excluidos por otro status).`;
   renderPriceTables(); setYear(y, !!prevYear);
 }
+
+/* =====================================================================
+   NÓMINA · lectura de REGISTRO_CASOS solamente, sin escribir estado local o remoto
+   ===================================================================== */
+const PAYROLL_SELECT = "select B,F,G,H,J,K,P,U,V,W,X,Y,Z,AF,AG,AH,AI where B is not null";
+const PAYROLL_MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+function payrollCell(row, index){ const c = row && row.c && row.c[index]; return c ? (c.v !== undefined && c.v !== null ? c.v : (c.f ?? "")) : ""; }
+async function fetchPayrollRows(){
+  const cfg = readJSON(STORE_CFG) || DEFAULT_CFG;
+  const sheetUrl = cfg.kind === "sheet" ? cfg.url : DEFAULT_SHEET_URL;
+  const id = extractSheetId(sheetUrl) || extractSheetId(DEFAULT_SHEET_URL);
+  if(!id) throw new Error("No se pudo resolver la hoja de nómina");
+  const t = await gviz(id, "REGISTRO_CASOS", PAYROLL_SELECT, 2);
+  return t.rows.map(row => ({
+    date: gvizDate(payrollCell(row,0)) || PayrollCore.parseDate(payrollCell(row,0)),
+    period: payrollCell(row,1), category: payrollCell(row,2), client: payrollCell(row,3),
+    activity: payrollCell(row,4), caseName: payrollCell(row,5), status: payrollCell(row,6),
+    tp: payrollCell(row,7), ta1: payrollCell(row,8), ta2: payrollCell(row,9),
+    amountTP: payrollCell(row,10), amountTA1: payrollCell(row,11), amountTA2: payrollCell(row,12),
+    paidTP: payrollCell(row,13), paidTA1: payrollCell(row,14), paidTA2: payrollCell(row,15), report: payrollCell(row,16)
+  }));
+}
+function payrollOption(value, label){ return `<option value="${esc(value)}">${esc(label)}</option>`; }
+function setPayrollOptions(id, options, selected){
+  const el = document.getElementById(id); if(!el) return;
+  el.innerHTML = options.map(([value,label]) => payrollOption(value,label)).join("");
+  const wanted = selected == null ? "" : String(selected);
+  if([...el.options].some(option => option.value === wanted)) el.value = wanted;
+}
+function buildPayrollOptions(){
+  const lines = PAYROLL_MODEL.lines, current = PayrollCore.currentNYPeriod();
+  const years = [...new Set([...lines.map(line => line.year), current.year, PAYROLL_FILTERS.year].filter(Boolean))].sort((a,b)=>b-a);
+  setPayrollOptions("payrollYear", [["all","Todos"], ...years.map(year=>[year,year])], PAYROLL_FILTERS.year || "all");
+  setPayrollOptions("payrollMonth", [["all","Todos"], ...PAYROLL_MONTHS.map((month,index)=>[index+1,month])], PAYROLL_FILTERS.month || "all");
+  setPayrollOptions("payrollHalf", [["all","Ambas"],[1,"1.ª quincena"],[2,"2.ª quincena"]], PAYROLL_FILTERS.half || "all");
+  setPayrollOptions("payrollTech", [["","Todos"], ...[...new Set(lines.map(line=>line.technician))].sort((a,b)=>a.localeCompare(b,"es")).map(value=>[value,value])], PAYROLL_FILTERS.technician);
+  setPayrollOptions("payrollRole", [["","Todos"],["TP","TP"],["TA1","TA1"],["TA2","TA2"]], PAYROLL_FILTERS.role);
+  setPayrollOptions("payrollActivity", [["","Todas"], ...[...new Set(lines.map(line=>line.activity).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es")).map(value=>[value,value])], PAYROLL_FILTERS.activity);
+  setPayrollOptions("payrollCase", [["","Todos"], ...[...new Set(lines.map(line=>line.caseName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es")).map(value=>[value,value])], PAYROLL_FILTERS.caseName);
+  setPayrollOptions("payrollPayment", [["","Todos"],["paid","Pagado"],["unpaid","Pendiente"],["review","Revisar"],["zero","Sin importe"]], PAYROLL_FILTERS.paymentStatus);
+  const statuses = [...new Set(lines.map(line=>line.jobStatus).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  setPayrollOptions("payrollJobStatus", [["","Todos"], ...statuses.map(value=>[value,value])], PAYROLL_FILTERS.jobStatus);
+  ["payrollFrom","payrollTo"].forEach((id,index)=>{ const el=document.getElementById(id); if(el) el.value = index ? (PAYROLL_FILTERS.to || "") : (PAYROLL_FILTERS.from || ""); });
+  const project = document.getElementById("payrollProject"); if(project) project.value = PAYROLL_FILTERS.project || "";
+}
+function readPayrollFilters(){
+  const val = id => document.getElementById(id)?.value || "";
+  PAYROLL_FILTERS = {
+    year: val("payrollYear") === "all" ? null : Number(val("payrollYear")) || null,
+    month: val("payrollMonth") === "all" ? null : Number(val("payrollMonth")) || null,
+    half: val("payrollHalf") === "all" ? null : Number(val("payrollHalf")) || null,
+    from:val("payrollFrom"), to:val("payrollTo"), technician:val("payrollTech"), role:val("payrollRole"),
+    activity:val("payrollActivity"), caseName:val("payrollCase"), project:val("payrollProject").trim(),
+    paymentStatus:val("payrollPayment"), jobStatus:val("payrollJobStatus")
+  };
+  saveUI();
+}
+function payrollMoney(value){ return "$" + (Math.round((Number(value)||0)*100)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function payrollStatusLabel(value){ return ({paid:"Pagado",unpaid:"Pendiente",review:"Revisar",zero:"Sin importe"})[value] || "Revisar"; }
+function payrollStatusClass(value){ return value === "paid" ? "paid" : value === "review" ? "review" : value === "unpaid" ? "unpaid" : ""; }
+function payrollDateLabel(value){ const p=String(value||"").match(/^(\d{4})-(\d{2})-(\d{2})$/); if(!p) return "Sin fecha"; return new Date(Date.UTC(+p[1],+p[2]-1,+p[3],12)).toLocaleDateString("es",{timeZone:"UTC",day:"numeric",month:"short",year:"numeric"}); }
+function payrollSelectedLines(){ return PayrollCore.filterAssignments(PAYROLL_MODEL.lines,PAYROLL_FILTERS); }
+function payrollPeriodSelected(){ return !!(PAYROLL_FILTERS.year && PAYROLL_FILTERS.month && PAYROLL_FILTERS.half); }
+function renderPayroll(){
+  const stateEl=document.getElementById("payrollState"), alertEl=document.getElementById("payrollAlerts");
+  if(!stateEl) return;
+  stateEl.className="payroll-state" + (PAYROLL_ERROR ? " error" : "");
+  stateEl.textContent=PAYROLL_BUSY ? "Consultando REGISTRO_CASOS…" : PAYROLL_ERROR ? "No se pudo actualizar la nómina. Los valores de pago no se muestran hasta leer la hoja." : PAYROLL_LOADED ? `${fmt(PAYROLL_MODEL.lines.length)} asignaciones elegibles · lectura directa del Sheet · ${new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit",timeZone:"America/New_York"})} ET` : "Esperando lectura de la hoja…";
+  const alerts=[];
+  if(PAYROLL_MODEL.unassigned.length){ const value=PAYROLL_MODEL.unassigned.reduce((sum,line)=>sum+line.amount,0); alerts.push(`<div class="payroll-alert">${fmt(PAYROLL_MODEL.unassigned.length)} importes están en slots sin técnico asignado (${payrollMoney(value)}). No se distribuyeron ni se incluyeron en facturas individuales.</div>`); }
+  if(PAYROLL_MODEL.reviewRows.length) alerts.push(`<div class="payroll-alert">${fmt(PAYROLL_MODEL.reviewRows.length)} registros elegibles no tienen fecha o quincena válida en B/F; se dejan fuera de los totales hasta corregirlos en el Sheet.</div>`);
+  if(PAYROLL_ERROR) alerts.push(`<div class="payroll-alert error">${esc(PAYROLL_ERROR)}</div>`);
+  alertEl.innerHTML=alerts.join("");
+  const lines=payrollSelectedLines(), summaries=PayrollCore.summarize(lines);
+  const sumBy=state=>lines.filter(line=>line.paidState===state).reduce((sum,line)=>sum+line.amount,0);
+  const total=lines.reduce((sum,line)=>sum+line.amount,0), paid=sumBy("paid"), pending=sumBy("unpaid"), review=sumBy("review");
+  document.getElementById("payrollKpis").innerHTML=[
+    ["Total de la vista",payrollMoney(total),`${fmt(lines.length)} slots de técnico`],
+    ["Pagado según Sheet",payrollMoney(paid),"Casillas AF–AH marcadas"],
+    ["Pendiente en Sheet",payrollMoney(pending),"Importes sin marcar como pagados"],
+    ["Pago por revisar",payrollMoney(review),"Valor de pago no reconocido"]
+  ].map(([lab,val,sub])=>`<div class="payroll-kpi"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`).join("");
+  const invoiceEnabled=payrollPeriodSelected();
+  document.getElementById("payrollSummaryHint").textContent=invoiceEnabled ? `${PayrollCore.periodLabel(PAYROLL_FILTERS.year,PAYROLL_FILTERS.month,PAYROLL_FILTERS.half)} · el PDF individual incluye la quincena completa y todos sus estados de pago` : "Selecciona año, mes y quincena para habilitar el invoice individual";
+  document.getElementById("payrollSummary").innerHTML=summaries.length ? summaries.map(summary=>`<article class="payroll-tech"><h4>${esc(summary.technician)}</h4><div class="payroll-tech-stats"><div><span>Total</span><b>${payrollMoney(summary.total)}</b></div><div><span>Pagado</span><b>${payrollMoney(summary.paid)}</b></div><div><span>Saldo</span><b>${payrollMoney(summary.balance)}</b></div></div><div class="payroll-muted" style="margin-top:7px">${fmt(summary.projects)} proyectos · ${fmt(summary.lineCount)} slots${summary.reportPending ? ` · ${fmt(summary.reportPending)} reportes por revisar` : ""}</div><button class="btn" type="button" data-payroll-invoice="${esc(summary.technician)}" ${invoiceEnabled ? "" : "disabled"}>Generar invoice PDF</button></article>`).join("") : `<div class="payroll-muted">No hay asignaciones que coincidan con estos filtros.</div>`;
+  document.getElementById("payrollCount").textContent=`${fmt(lines.length)} slots · ${fmt(summaries.length)} técnicos`;
+  document.getElementById("payrollBody").innerHTML=lines.length ? lines.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.technician.localeCompare(b.technician,"es")||a.role.localeCompare(b.role)).map(line=>`<tr><td class="payroll-num">${payrollDateLabel(line.date)}</td><td><b>${esc(line.technician)}</b></td><td>${esc(line.role)}</td><td>${esc(line.project||line.client||"Sin dato")}${line.cancellationFee?`<div class="payroll-muted">Fee registrado en el Sheet</div>`:""}</td><td>${esc(line.activity||"Sin dato")}</td><td>${esc(line.caseName||"Sin dato")}</td><td>${esc(line.jobStatus)}${line.reportPending?`<span class="payroll-warning">REALIZADO · revisar email report</span>`:""}</td><td class="num payroll-num">${payrollMoney(line.amount)}</td><td><span class="pay-state ${payrollStatusClass(line.paidState)}">${payrollStatusLabel(line.paidState)}</span></td></tr>`).join("") : `<tr><td colspan="9" class="payroll-muted">No hay asignaciones para mostrar.</td></tr>`;
+  if(PAYROLL_FILTERS.from && PAYROLL_FILTERS.to && PAYROLL_FILTERS.from>PAYROLL_FILTERS.to){ document.getElementById("payrollCount").textContent="El rango de fechas inicia después de su fecha final."; }
+  renderHeader();
+}
+async function refreshPayroll(){
+  if(PAYROLL_BUSY) return;
+  PAYROLL_BUSY=true; PAYROLL_ERROR=""; PAYROLL_LOADED=false;
+  PAYROLL_MODEL={lines:[],unassigned:[],reviewRows:[],excludedStatus:0};
+  const button=document.getElementById("payrollRefresh"); if(button) button.disabled=true;
+  renderPayroll();
+  try{ const rows=await fetchPayrollRows(); PAYROLL_MODEL=PayrollCore.buildAssignments(rows); PAYROLL_LOADED=true; buildPayrollOptions(); }
+  catch(error){ PAYROLL_ERROR=error && error.message ? error.message : "Error de lectura"; PAYROLL_LOADED=false; }
+  finally{ PAYROLL_BUSY=false; if(button) button.disabled=false; renderPayroll(); }
+}
+function payrollInvoiceRows(technician){
+  if(!payrollPeriodSelected()) return [];
+  return PAYROLL_MODEL.lines.filter(line=>line.technician===technician && line.year===PAYROLL_FILTERS.year && line.month===PAYROLL_FILTERS.month && line.half===PAYROLL_FILTERS.half);
+}
+function printPayrollInvoice(technician){
+  if(payrollPrinting || !payrollPeriodSelected()) return;
+  const lines=payrollInvoiceRows(technician);
+  if(!lines.length) return;
+  payrollPrinting=true;
+  const year=PAYROLL_FILTERS.year, month=PAYROLL_FILTERS.month, half=PAYROLL_FILTERS.half;
+  const total=lines.reduce((sum,line)=>sum+line.amount,0), paid=lines.filter(line=>line.paidState==="paid").reduce((sum,line)=>sum+line.amount,0);
+  const pending=lines.filter(line=>line.paidState==="unpaid").reduce((sum,line)=>sum+line.amount,0), review=lines.filter(line=>line.paidState==="review").reduce((sum,line)=>sum+line.amount,0);
+  const folio=PayrollCore.folio(technician,year,month,half,lines);
+  const emitted=new Intl.DateTimeFormat("es",{timeZone:"America/New_York",day:"numeric",month:"long",year:"numeric"}).format(new Date());
+  const period=PayrollCore.periodLabel(year,month,half);
+  const ordered=lines.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.project.localeCompare(b.project,"es")||a.activity.localeCompare(b.activity,"es")||a.role.localeCompare(b.role));
+  document.getElementById("payrollPrintView").innerHTML=`<div class="invoice-head"><div class="payroll-eyebrow">DPTO TÉCNICO · DESGLOSE DE NÓMINA</div><h1>Invoice de servicios</h1><div>${esc(technician)} · ${esc(period)}</div></div><div class="invoice-meta"><div><div class="invoice-label">Técnico</div><b>${esc(technician)}</b></div><div><div class="invoice-label">Periodo de liquidación</div><b>${esc(period)}</b></div><div><div class="invoice-label">Folio reproducible</div><b>${esc(folio)}</b></div><div><div class="invoice-label">Generado</div><b>${esc(emitted)} · America/New_York</b></div></div><table><thead><tr><th>Fecha</th><th>Proyecto / cliente · actividad · CASE</th><th>Rol</th><th>Trabajo</th><th class="num">Importe</th><th>Pago en Sheet</th></tr></thead><tbody>${ordered.map(line=>`<tr><td>${payrollDateLabel(line.date)}</td><td><b>${esc(line.project||line.client||"Sin dato")}</b><div class="invoice-line-note">${esc(line.activity||"Sin actividad")} · CASE ${esc(line.caseName||"Sin dato")}</div>${line.cancellationFee?`<div class="invoice-line-note">Fee existente de cancelación NEW</div>`:""}${line.reportPending?`<div class="invoice-line-note">REALIZADO · revisar email report en el Sheet</div>`:""}</td><td>${esc(line.role)}</td><td>${esc(line.jobStatus)}</td><td class="num">${payrollMoney(line.amount)}</td><td>${payrollStatusLabel(line.paidState)}</td></tr>`).join("")}</tbody></table><div class="invoice-totalbox"><div>Total por asignación</div><div>${payrollMoney(total)}</div><div>Marcado en Sheet</div><div>− ${payrollMoney(paid)}</div><div class="grand">Saldo de la quincena</div><div class="grand">${payrollMoney(total-paid)}</div></div><div class="invoice-note">Este reporte refleja los importes actuales de X/Y/Z y las casillas AF–AH leídas del Sheet. La casilla es una marca administrativa: no comprueba una transferencia bancaria y el Sheet actual no distingue si se marcó manualmente o por calendario. Generar o reimprimir el PDF no cambia las casillas ni envía el archivo. Pendiente explícito: ${payrollMoney(pending)} · por revisar: ${payrollMoney(review)}. El pago debe actualizarse mediante el proceso autorizado.</div>`;
+  const previousTitle=document.title;
+  document.title=`${folio} · ${technician}`;
+  const finish=()=>{document.body.classList.remove("print-payroll"); document.getElementById("payrollPrintView").innerHTML=""; document.title=previousTitle; payrollPrinting=false; window.removeEventListener("afterprint",finish);};
+  window.addEventListener("afterprint",finish,{once:true});
+  document.body.classList.add("print-payroll");
+  setTimeout(()=>window.print(),80);
+}
+function bindPayrollEvents(){
+  const filters=document.getElementById("payrollFilters");
+  filters.addEventListener("change",event=>{if(event.target && event.target.matches("select,input[type=date]")){readPayrollFilters();renderPayroll();}});
+  document.getElementById("payrollProject").addEventListener("input",()=>{readPayrollFilters();renderPayroll();});
+  document.getElementById("payrollReset").onclick=()=>{const period=PayrollCore.currentNYPeriod(); PAYROLL_FILTERS={year:period.year,month:period.month,half:period.half,from:"",to:"",technician:"",role:"",activity:"",caseName:"",project:"",paymentStatus:"",jobStatus:""}; buildPayrollOptions(); renderPayroll(); saveUI();};
+  document.getElementById("payrollRefresh").onclick=refreshPayroll;
+  document.getElementById("payrollSummary").addEventListener("click",event=>{const button=event.target.closest("[data-payroll-invoice]"); if(button) printPayrollInvoice(button.dataset.payrollInvoice);});
+}
+bindPayrollEvents();
 
 /* =====================================================================
    TABULADOR
@@ -1637,7 +1906,7 @@ function statusLine(kind){ const src = {script:"Apps Script", sheet:"Google Shee
 const readJSON = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const writeJSON = (k,v) => { if(!PERSIST) return; try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} updateStoreInfo(); };
 function updateStoreInfo(){ const el = document.getElementById("storeInfo"); if(!el) return; let bytes = 0, n = 0; try { for(let i = 0; i < localStorage.length; i++){ const k = localStorage.key(i); if(k && k.startsWith("opsdash3:")){ bytes += (localStorage.getItem(k) || "").length; n++; } } } catch(e){} el.textContent = PERSIST ? (n ? `${n} elementos guardados · ${(bytes/1024).toFixed(0)} KB` : "Nada guardado todavía") : "Guardado desactivado"; }
-function saveUI(){ writeJSON(STORE_UI, {year:state.year, months:[...state.months], quick:document.getElementById("fQuick").value, f:{q:state.q, fam:state.fam, act:state.act, cas:state.cas, cat:state.cat, ins:state.ins, rep:state.rep, lim:state.lim, ret:state.ret, tech:state.tech, role:state.role, cli:state.cli}, sort:state.sort, dir:state.dir, page:currentPage, tabBlock, fcol:filtersCollapsed, fire:{dc:fireCalcState.dc, sc:fireCalcState.sc, base:fireCalcState.base}, hours:hoursState, qcalc:{cart, miles:document.getElementById("qMiles").value}}); }
+function saveUI(){ writeJSON(STORE_UI, {year:state.year, months:[...state.months], quick:document.getElementById("fQuick").value, f:{q:state.q, fam:state.fam, act:state.act, cas:state.cas, cat:state.cat, ins:state.ins, rep:state.rep, lim:state.lim, ret:state.ret, tech:state.tech, role:state.role, cli:state.cli}, sort:state.sort, dir:state.dir, page:currentPage, tabBlock, fcol:filtersCollapsed, fire:{dc:fireCalcState.dc, sc:fireCalcState.sc, base:fireCalcState.base}, hours:hoursState, qcalc:{cart, miles:document.getElementById("qMiles").value}, payroll:PAYROLL_FILTERS}); }
 let currentPage = "dash";
 function saveCache(rows, source){ writeJSON(STORE_DATA, {rows, source, at:new Date().toISOString()}); }
 function extractSheetId(url){ const m = String(url).match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/); return m ? m[1] : null; }
@@ -1729,7 +1998,7 @@ mq.addEventListener("change", () => { if(!document.documentElement.getAttribute(
 paintThemeBtn();
 
 /* pestañas */
-function showPage(p){ currentPage = p; document.querySelectorAll(".topbar .seg button").forEach(b => b.setAttribute("aria-selected", b.dataset.page === p)); document.getElementById("pageDash").hidden = p !== "dash"; document.getElementById("pageTab").hidden = p !== "tab"; if(p === "tab") renderTab(); window.scrollTo({top:0}); saveUI(); }
+function showPage(p){ currentPage = p; document.querySelectorAll(".topbar .seg button").forEach(b => b.setAttribute("aria-selected", b.dataset.page === p)); document.getElementById("pageDash").hidden = p !== "dash"; document.getElementById("pageTab").hidden = p !== "tab"; document.getElementById("pagePayroll").hidden = p !== "payroll"; if(p === "tab") renderTab(); if(p === "payroll"){ renderPayroll(); if(!PAYROLL_LOADED && !PAYROLL_BUSY) refreshPayroll(); } renderHeader(); window.scrollTo({top:0}); saveUI(); }
 document.querySelectorAll(".topbar .seg button").forEach(b => b.onclick = () => showPage(b.dataset.page));
 
 /* Arranque: pestaña nueva → consulta la fuente · F5 → datos guardados · sin nada → sheet por defecto */
@@ -1738,7 +2007,7 @@ detectDevice(); window.addEventListener("resize", detectDevice);
 (function init(){
   document.getElementById("persist").checked = PERSIST;
   const ui = readJSON(STORE_UI);
-  if(ui){ state.year = ui.year ?? null; pendingMonths = Array.isArray(ui.months) ? ui.months : null; Object.assign(state, ui.f || {}); state.sort = ui.sort || "date"; state.dir = ui.dir || "asc"; if(ui.quick) document.getElementById("fQuick").value = ui.quick; if(typeof ui.tabBlock !== "undefined") tabBlock = ui.tabBlock; if(ui.fcol || (ui.fcol === undefined && detectDevice() === "phone")) setFiltersCollapsed(true); if(ui.fire) Object.assign(fireCalcState, ui.fire); if(ui.hours && Array.isArray(ui.hours.rows) && ui.hours.rows.length) Object.assign(hoursState, ui.hours); if(ui.qcalc){ if(Array.isArray(ui.qcalc.cart)) cart = ui.qcalc.cart; if(typeof ui.qcalc.miles !== "undefined") document.getElementById("qMiles").value = ui.qcalc.miles; } }
+  if(ui){ state.year = ui.year ?? null; pendingMonths = Array.isArray(ui.months) ? ui.months : null; Object.assign(state, ui.f || {}); if(ui.payroll) PAYROLL_FILTERS = {...PAYROLL_FILTERS,...ui.payroll}; state.sort = ui.sort || "date"; state.dir = ui.dir || "asc"; if(ui.quick) document.getElementById("fQuick").value = ui.quick; if(typeof ui.tabBlock !== "undefined") tabBlock = ui.tabBlock; if(ui.fcol || (ui.fcol === undefined && detectDevice() === "phone")) setFiltersCollapsed(true); if(ui.fire) Object.assign(fireCalcState, ui.fire); if(ui.hours && Array.isArray(ui.hours.rows) && ui.hours.rows.length) Object.assign(hoursState, ui.hours); if(ui.qcalc){ if(Array.isArray(ui.qcalc.cart)) cart = ui.qcalc.cart; if(typeof ui.qcalc.miles !== "undefined") document.getElementById("qMiles").value = ui.qcalc.miles; } }
   buildChartSelectors();
   const cfg = readJSON(STORE_CFG) || DEFAULT_CFG, cache = readJSON(STORE_DATA), tabc = readTab();
   const nav = performance.getEntriesByType("navigation")[0], isReload = nav && nav.type === "reload";
@@ -1748,6 +2017,8 @@ detectDevice(); window.addEventListener("resize", detectDevice);
   if(tabc && tabc.cells){ try { TABU = {...parseTabCells(tabc.cells), source: tabc.source + " (guardado)"}; } catch(e){} }
   renderTab();
   updateStoreInfo();
+  buildPayrollOptions();
+  refreshPayroll();
   if(!ui && detectDevice() === "phone") setFiltersCollapsed(true);
   if(cache){ loadDataset(cache.rows, cache.source, cache.at); statusLine("ok"); }
   if(ui && ui.page === "tab") showPage("tab");
