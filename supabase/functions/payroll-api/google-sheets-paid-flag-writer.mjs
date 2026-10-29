@@ -6,10 +6,11 @@ const PAY_COLUMNS = Object.freeze({ TP: { field: "paidTP", column: "AF", index: 
 const META_KEY = "lrs.payroll.assignment.v1";
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])-Q[12]$/;
 
-function fail(code, reviewRequired = false, outcomeUnknown = false) {
+function fail(code, reviewRequired = false, outcomeUnknown = false, noSideEffect = false) {
   const error = new Error(code);
   error.reviewRequired = reviewRequired;
   error.outcomeUnknown = outcomeUnknown;
+  error.noSideEffect = noSideEffect;
   return error;
 }
 function assertReady(config) {
@@ -59,7 +60,8 @@ export function createGoogleSheetsPaidFlagWriter({ config = {}, fetcher = global
         ...(body ? { body: JSON.stringify(body) } : {})
       });
     } catch (_) { throw fail("google_sheets_request_failed", false, outcomeUnknown); }
-    if (!response.ok) throw fail(response.status === 412 ? "sheet_revision_conflict" : `google_sheets_http_${response.status}`, false, outcomeUnknown && (response.status >= 500 || response.status === 408 || response.status === 429));
+    if (!response.ok) throw fail(response.status === 412 ? "sheet_revision_conflict" : `google_sheets_http_${response.status}`, false,
+      outcomeUnknown && (response.status >= 500 || response.status === 408 || response.status === 429), response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429);
     try { return await response.json(); } catch (_) { throw fail("google_sheets_response_invalid", false, outcomeUnknown); }
   }
 
@@ -109,17 +111,29 @@ export function createGoogleSheetsPaidFlagWriter({ config = {}, fetcher = global
     return { dataFilter, row, line, paidFlag, paidState: core.paidState(paidFlag) };
   }
 
-  async function preflightClosedSnapshot({ snapshot }) {
+  async function preflightClosedSnapshot({ snapshot, attributedPaidAssignments = [] }) {
     assertReady(config);
     if (!snapshot || snapshot.state !== "closed" || snapshot.frozen !== true || !snapshot.snapshotDigest && !snapshot.digest ||
         !Array.isArray(snapshot.lines) || !snapshot.lines.length) return { state: "needs_review", reason: "closed_snapshot_required" };
+    const attribution = new Map();
+    for (const item of Array.isArray(attributedPaidAssignments) ? attributedPaidAssignments : []) {
+      if (!item || !/^[0-9a-f-]{36}$/i.test(item.assignmentId || "") || !PAY_COLUMNS[item.role] ||
+          typeof item.idempotencyKey !== "string" || !item.idempotencyKey.trim()) return { state: "needs_review", reason: "calendar_job_attribution_invalid" };
+      const key = idRole(item.assignmentId, item.role);
+      const frozenLine = snapshot.lines.find(line => idRole(line.assignmentId, line.role) === key);
+      if (!frozenLine || frozenLine.amount <= 0 || frozenLine.paidFlag !== false) return { state: "needs_review", reason: "calendar_job_attribution_outside_snapshot" };
+      if (attribution.has(key)) return { state: "needs_review", reason: "calendar_job_attribution_ambiguous" };
+      attribution.set(key, item.idempotencyKey);
+    }
     for (const line of snapshot.lines) {
       if (line.amount === 0) continue;
       if (line.paidFlag === true) continue;
       if (line.paidFlag !== false || !line.sheetMetadataId) return { state: "needs_review", reason: "payment_flag_or_row_metadata_missing" };
       let current;
       try { current = await readAssignment(line); } catch (_) { return { state: "needs_review", reason: "sheet_assignment_preflight_failed" }; }
-      if (current.paidState !== "unpaid") return { state: "needs_review", reason: "manual_payment_conflict" };
+      const wasCompletedByThisJob = attribution.has(idRole(line.assignmentId, line.role));
+      if (wasCompletedByThisJob && current.paidState !== "paid") return { state: "needs_review", reason: "automated_payment_flag_missing" };
+      if (!wasCompletedByThisJob && current.paidState !== "unpaid") return { state: "needs_review", reason: "manual_payment_conflict" };
     }
     return { state: "ready" };
   }

@@ -40,6 +40,13 @@ async function digestPayload(value) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return [...digest].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
+export function isProvablyUnstartedExpiredQueued(row, now = new Date()) {
+  const leaseMs = Date.parse(row?.lease_expires_at || "");
+  const nowMs = new Date(now).getTime();
+  return row?.state === "queued" && Number.isFinite(leaseMs) && Number.isFinite(nowMs) && leaseMs <= nowMs &&
+    row.attempt_count === 0 && row.started_at == null && row.result_code == null && row.result_payload == null &&
+    row.completed_at == null && row.reconciled_at == null;
+}
 async function digestBytes(bytes) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return [...digest].map(byte => byte.toString(16).padStart(2, "0")).join("");
@@ -63,12 +70,27 @@ async function executeIdempotent({ jobs, audit, key, type, periodKey, identityRe
   }
   let claimed = false;
   if (prior) {
-    if (prior.state === "queued") {
-      const leaseMs = Date.parse(prior.lease_expires_at || "");
+    if (prior.state === "failed" && type === "calendar_mark" &&
+        prior.result_payload?.failureClass === "provider_declined_without_effect" &&
+        typeof jobs.retryKnownNoEffect === "function") {
       const nowMs = new Date(now).getTime();
-      if (!Number.isFinite(leaseMs) || leaseMs > nowMs || typeof jobs.claimExpiredQueued !== "function") {
+      try {
+        claimed = await jobs.retryKnownNoEffect(key, {
+          requestDigest: digest,
+          startedAt: new Date(nowMs).toISOString(),
+          leaseExpiresAt: new Date(nowMs + 120_000).toISOString()
+        });
+      } catch (_) { claimed = false; }
+      if (!claimed) return { state: "needs_review", reason: "safe_calendar_retry_claim_failed", replay: true };
+      auditEvent.idempotencyKey = `${key}:attempt-${(prior.attempt_count || 1) + 1}`;
+    } else if (prior.state === "queued") {
+      const nowMs = new Date(now).getTime();
+      const leaseMs = Date.parse(prior.lease_expires_at || "");
+      if (Number.isFinite(leaseMs) && leaseMs > nowMs) {
         return { state: "queued", reason: "job_lease_active_or_unavailable", replay: true };
       }
+      if (!isProvablyUnstartedExpiredQueued(prior, now)) return { state: "reconcile_required", reason: "queued_job_execution_evidence_present", replay: true };
+      if (typeof jobs.claimExpiredQueued !== "function") return { state: "queued", reason: "expired_queue_claim_unavailable", replay: true };
       const startedAt = new Date(nowMs).toISOString();
       const leaseExpiresAt = new Date(nowMs + 120_000).toISOString();
       try { claimed = await jobs.claimExpiredQueued(key, { expectedLeaseExpiresAt: prior.lease_expires_at, startedAt, leaseExpiresAt }); }
@@ -123,7 +145,10 @@ async function executeIdempotent({ jobs, audit, key, type, periodKey, identityRe
     result = await execute();
   } catch (error) {
     const state = error?.outcomeUnknown === true ? "unknown" : error?.reviewRequired === true ? "needs_review" : "failed";
-    try { await jobs.transition(key, state, { result_code: state, completed_at: new Date(now).toISOString() }, { expectedState: "running" }); } catch (_) { /* A running job is reconciled; it is never retried automatically. */ }
+    const resultPayload = state === "failed" && error?.noSideEffect === true
+      ? { failureClass: "provider_declined_without_effect", code: String(error?.message || "provider_declined").slice(0, 120) }
+      : null;
+    try { await jobs.transition(key, state, { result_code: state, ...(resultPayload ? { result_payload: resultPayload } : {}), completed_at: new Date(now).toISOString() }, { expectedState: "running" }); } catch (_) { /* A running job is reconciled; it is never retried automatically. */ }
     try { await audit.record({ ...auditEvent, outcome: state }); } catch (_) { /* Audit repair is separate from provider retry. */ }
     return { state, reason: "operation_failed", idempotencyKey: key };
   }
@@ -199,7 +224,7 @@ export async function archiveClosedInvoice({ snapshot: rawSnapshot, technicianId
   return executeIdempotent({
     jobs, audit, key, type: "invoice_drive", periodKey: snapshot.periodKey,
     identityRef: `${snapshot.id}:${technicianId}`, payload, actorId,
-    execute: async () => {
+        execute: async () => {
       const current = await drive.findCurrentInvoice({ technicianId, periodKey: snapshot.periodKey });
       if (current) {
         requireAdapter(drive, "replacePreservingRevision");
@@ -230,7 +255,7 @@ export async function archiveClosedInvoice({ snapshot: rawSnapshot, technicianId
   });
 }
 
-export async function sendVerifiedInvoice({ snapshot: rawSnapshot, technicianId, archivedFile, pdfBytes, recipientDirectory, mailer, previewVerifier, previewToken, jobs, audit, actorId = null }) {
+export async function sendVerifiedInvoice({ snapshot: rawSnapshot, technicianId, archivedFile, pdfBytes, recipientDirectory, mailer, previewVerifier, previewToken, jobs, audit, actorId = null, now = new Date() }) {
   const snapshot = validateSnapshot(rawSnapshot);
   if (!(pdfBytes instanceof Uint8Array) || pdfBytes.length < 5 || String.fromCharCode(...pdfBytes.slice(0, 5)) !== "%PDF-") throw new TypeError("pdf_bytes_required");
   if (!snapshot.lines.some(line => line.technicianId === technicianId)) throw new TypeError("technician_not_in_snapshot");
@@ -282,11 +307,16 @@ export async function sendVerifiedInvoice({ snapshot: rawSnapshot, technicianId,
   };
   const unresolved = await jobs.findUnresolvedEmail({ periodKey: snapshot.periodKey, technicianId });
   if (!Array.isArray(unresolved)) throw new TypeError("email_job_lookup_invalid");
-  if (unresolved.length) return { state: "reconcile_required", reason: "previous_email_outcome_unresolved", replay: true };
+  if (unresolved.length) {
+    if (unresolved.length !== 1 || unresolved[0]?.idempotency_key !== key ||
+        !isProvablyUnstartedExpiredQueued(unresolved[0], now) || unresolved[0].request_digest !== await digestPayload(payload)) {
+      return { state: "reconcile_required", reason: "previous_email_outcome_unresolved", replay: true };
+    }
+  }
   return executeIdempotent({
     jobs, audit, key, type: "invoice_email", periodKey: snapshot.periodKey,
     identityRef: `${snapshot.id}:${technicianId}:${deliveryAttemptId}`, payload, actorId,
-    origin: "user",
+    origin: "user", now,
     execute: async () => {
       const result = await mailer.send({
         to: recipient.email, subject: `Invoice de nómina · ${snapshot.periodKey}`,
@@ -337,7 +367,31 @@ export async function executeScheduledAdministrativeMarks({ snapshot: rawSnapsho
   if (changes.some(line => typeof line.paidFlag !== "boolean")) return { state: "needs_review", reason: "payment_flag_unknown", changed: 0 };
   requireAdapter(writer, "preflightClosedSnapshot");
   let preflight;
-  try { preflight = await writer.preflightClosedSnapshot({ snapshot }); }
+  const completedAssignments = [];
+  requireAdapter(jobs, "get");
+  for (const line of changes) {
+    if (line.paidFlag !== false) continue;
+    const identity = { jobType: "calendar_mark", periodKey: snapshot.periodKey, assignmentId: `${line.assignmentId}:${line.role}` };
+    const key = await makeWorkflowIdempotencyKey(identity);
+    const payload = { ...identity, snapshotId: snapshot.id, sourceRevision: snapshot.sourceRevision, paidFlagBefore: false, dueDate };
+    let prior;
+    try { prior = await jobs.get(key); }
+    catch (_) { return { state: "needs_review", reason: "calendar_job_lookup_failed", changed: 0 }; }
+    if (!prior) continue;
+    if (prior.idempotency_key !== key || prior.job_type !== "calendar_mark" || prior.period_key !== snapshot.periodKey ||
+        prior.request_digest !== await digestPayload(payload)) return { state: "needs_review", reason: "calendar_job_identity_conflict", changed: 0 };
+    if (prior.state === "succeeded") {
+      const result = prior.result_payload;
+      if (!(["ok", "reconciled"].includes(prior.result_code)) || result?.assignmentId !== line.assignmentId ||
+          result?.role !== line.role || result?.snapshotId !== snapshot.id || result?.sourceRevision !== snapshot.sourceRevision ||
+          result?.origin !== "automatic-calendar-policy" || result?.verified !== true || result?.administrativePaidFlag !== true ||
+          result?.bankTransferVerified !== false) {
+        return { state: "needs_review", reason: "calendar_job_result_unverified", changed: 0 };
+      }
+      completedAssignments.push({ assignmentId: line.assignmentId, role: line.role, idempotencyKey: key });
+    }
+  }
+  try { preflight = await writer.preflightClosedSnapshot({ snapshot, attributedPaidAssignments: completedAssignments }); }
   catch (_) { return { state: "needs_review", reason: "sheet_preflight_failed", changed: 0 }; }
   if (preflight?.state !== "ready") return { state: "needs_review", reason: preflight?.reason || "sheet_preflight_failed", changed: 0 };
   let changed = 0;
@@ -361,12 +415,17 @@ export async function executeScheduledAdministrativeMarks({ snapshot: rawSnapsho
         if (written?.outcomeUnknown === true) { const error = new Error("sheet_write_unverified"); error.outcomeUnknown = true; throw error; }
         if (written?.conflict === true) { const error = new Error("sheet_manual_conflict"); error.reviewRequired = true; throw error; }
         if (written?.updated !== true) throw new Error("sheet_write_not_applied");
-        return { assignmentId: line.assignmentId, role: line.role, origin: "automatic-calendar-policy" };
+        return { assignmentId: line.assignmentId, role: line.role, snapshotId: snapshot.id,
+          sourceRevision: snapshot.sourceRevision, origin: "automatic-calendar-policy", verified: true,
+          administrativePaidFlag: true, bankTransferVerified: false };
       }
     });
     results.push(result);
-    if (result.state === "succeeded") changed++;
-    if (result.state === "unknown" || result.state === "failed") return { state: result.state, dueDate, changed, results };
+    if (result.state === "succeeded" && result.replay !== true) changed++;
+    if (result.state === "succeeded" && result.replay === true) results[results.length - 1] = { ...result, state: "already_marked" };
+    if (["queued", "unknown", "failed", "needs_review", "reconcile_required"].includes(result.state)) {
+      return { state: result.state, dueDate, changed, results };
+    }
   }
   return { state: "succeeded", dueDate, changed, results };
 }

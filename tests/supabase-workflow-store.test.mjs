@@ -11,6 +11,7 @@ test("workflow store persists jobs and audit only through fixed private RPC cont
     if (name === "lrs_workflow_job_get") return { data: job, error: null };
     if (name === "lrs_workflow_job_insert") return { data: true, error: null };
     if (name === "lrs_workflow_job_find_unresolved_email") return { data: [], error: null };
+    if (name === "lrs_workflow_job_claim_expired_queued" || name === "lrs_workflow_calendar_mark_retry_no_effect") return { data: true, error: null };
     if (name === "lrs_workflow_job_transition" || name === "lrs_record_audit_event") return { data: true, error: null };
     throw new Error("unexpected_rpc");
   } };
@@ -20,9 +21,11 @@ test("workflow store persists jobs and audit only through fixed private RPC cont
     technician_id: "tech-fixture", source_snapshot_ref: "snapshot-fixture", request_digest: "a".repeat(64), requested_by: "user-fixture", lease_expires_at: "2026-10-29T12:00:00Z" }), true);
   assert.deepEqual(await store.jobs.findUnresolvedEmail({ periodKey: "2026-10-Q1", technicianId: "tech-fixture" }), []);
   await store.jobs.transition(job.idempotency_key, "running", { started_at: "2026-10-29T12:00:00Z" }, { expectedState: "queued" });
+  assert.equal(await store.jobs.retryKnownNoEffect(job.idempotency_key, { requestDigest: "b".repeat(64),
+    startedAt: "2026-10-29T12:01:00Z", leaseExpiresAt: "2026-10-29T12:03:00Z" }), true);
   await store.audit.record({ idempotencyKey: job.idempotency_key, actorId: "user-fixture", origin: "user", action: "invoice_drive",
     entityType: "invoice_drive", entityRef: "snapshot-fixture:tech-fixture", periodKey: job.period_key, outcome: "succeeded" });
-  assert.deepEqual(calls.map(call => call.name), ["lrs_workflow_job_get", "lrs_workflow_job_insert", "lrs_workflow_job_find_unresolved_email", "lrs_workflow_job_transition", "lrs_record_audit_event"]);
+  assert.deepEqual(calls.map(call => call.name), ["lrs_workflow_job_get", "lrs_workflow_job_insert", "lrs_workflow_job_find_unresolved_email", "lrs_workflow_job_transition", "lrs_workflow_calendar_mark_retry_no_effect", "lrs_record_audit_event"]);
   assert.equal(calls[3].args.p_expected_state, "queued");
   assert.equal(calls[3].args.p_next_state, "running");
 });
@@ -52,4 +55,13 @@ test("workflow store migration limits job operations to server role and atomical
   assert.doesNotMatch(sql, /^\s*SECURITY DEFINER$/m);
   assert.match(sql, /ALTER FUNCTION public\.lrs_get_user_access\(uuid\) SECURITY INVOKER/);
   assert.match(sql, /ALTER FUNCTION public\.lrs_record_audit_event\(text, uuid, text, text, text, text, text, text, text\) SECURITY INVOKER/);
+});
+
+test("calendar queued claims and known-no-effect retries are tightly constrained to server role", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20261029061000_snapshot_recipient_calendar.sql", import.meta.url), "utf8");
+  assert.match(sql, /j\.attempt_count = 0 AND j\.started_at IS NULL AND j\.result_code IS NULL/);
+  assert.match(sql, /lrs_workflow_calendar_mark_retry_no_effect/);
+  assert.match(sql, /j\.job_type = 'calendar_mark'[\s\S]+j\.state = 'failed'[\s\S]+j\.result_payload ->> 'failureClass' = 'provider_declined_without_effect'/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.lrs_workflow_calendar_mark_retry_no_effect[\s\S]+FROM PUBLIC, anon, authenticated/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.lrs_workflow_calendar_mark_retry_no_effect[\s\S]+TO service_role/);
 });

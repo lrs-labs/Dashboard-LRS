@@ -55,11 +55,14 @@ export function createPayrollWorkflowRuntime({ supabaseAdmin, core, env = {}, re
     identityResolver: async lines => identitiesMatch(lines, await identities.findByAssignmentIds(lines.map(line => line.assignmentId))),
     buildInvoice(snapshot, technicianId) {
       const technician = snapshot.lines.find(line => line.technicianId === technicianId)?.technician;
-      return buildPayrollInvoice(snapshot.lines, technician, snapshot.periodKey, core);
+      return buildPayrollInvoice(snapshot.lines, technician, snapshot.periodKey, core, {
+        technicianId,
+        generatedAt: snapshot.frozenAt
+      });
     },
     renderPdf(invoice) { return generatePayrollInvoicePdf(invoice).bytes; },
     drive, jobs, audit, recipientDirectory: recipients, previewSigner: preview, previewVerifier: preview,
-    mailer
+    mailer, now
   });
   return Object.freeze({ handler, driveEnabled, emailEnabled: emailEnabled && !!preview,
     tokenProviderConfigured: tokenProvider.configured, sourceBridgeConfigured });

@@ -59,6 +59,15 @@ export function createSupabaseWorkflowStore(supabaseAdmin) {
         p_lease_expires_at: leaseExpiresAt
       });
       return claimed === true;
+    },
+    async retryKnownNoEffect(idempotencyKey, { requestDigest, startedAt, leaseExpiresAt } = {}) {
+      const claimed = await call("lrs_workflow_calendar_mark_retry_no_effect", {
+        p_idempotency_key: idempotencyKey,
+        p_request_digest: requestDigest,
+        p_started_at: startedAt,
+        p_lease_expires_at: leaseExpiresAt
+      });
+      return claimed === true;
     }
   });
 

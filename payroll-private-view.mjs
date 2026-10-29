@@ -44,7 +44,7 @@ export function filterPayrollLines(lines, filters, core) {
   });
 }
 
-export function buildPayrollInvoice(lines, technician, periodKey, core) {
+export function buildPayrollInvoice(lines, technician, periodKey, core, { technicianId, generatedAt } = {}) {
   if (!core?.periodLabel || !core?.folio || !core?.summarize) throw new TypeError("payroll_core_required");
   const period = parsePeriodKey(periodKey);
   const name = String(technician ?? "").trim();
@@ -59,6 +59,12 @@ export function buildPayrollInvoice(lines, technician, periodKey, core) {
       a.caseName.localeCompare(b.caseName, "es"));
   if (!invoiceLines.length) return null;
 
+  const technicianIds = new Set(invoiceLines.map(line => line.technicianId).filter(value => typeof value === "string" && value.trim()));
+  const stableTechnicianId = typeof technicianId === "string" && technicianId.trim()
+    ? technicianId.trim()
+    : technicianIds.size === 1 ? [...technicianIds][0] : null;
+  if (stableTechnicianId && invoiceLines.some(line => line.technicianId && line.technicianId !== stableTechnicianId)) return null;
+
   const summary = core.summarize(invoiceLines)[0];
   const amountReviewCount = invoiceLines.filter(line => typeof line.amount !== "number" || !Number.isFinite(line.amount)).length;
   const knownAmount = invoiceLines.reduce((sum, line) => sum + (Number.isFinite(line.amount) ? line.amount : 0), 0);
@@ -67,6 +73,7 @@ export function buildPayrollInvoice(lines, technician, periodKey, core) {
   const review = invoiceLines.reduce((sum, line) => sum + (line.paidState === "review" && Number.isFinite(line.amount) ? line.amount : 0), 0);
   const reviewCount = invoiceLines.filter(line => line.paidState === "review").length;
   return {
+    technicianId: stableTechnicianId,
     technician: name,
     period,
     periodKey,
@@ -83,7 +90,9 @@ export function buildPayrollInvoice(lines, technician, periodKey, core) {
     amountReviewCount,
     reportPendingCount: invoiceLines.filter(line => line.reportPending).length,
     projectCount: summary?.projects || 0,
-    generatedAt: new Date().toISOString(),
+    generatedAt: typeof generatedAt === "string" && Number.isFinite(Date.parse(generatedAt))
+      ? new Date(generatedAt).toISOString()
+      : new Date().toISOString(),
     state: "preview-only"
   };
 }

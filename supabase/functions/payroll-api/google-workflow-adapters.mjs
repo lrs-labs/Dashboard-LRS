@@ -152,6 +152,7 @@ export function createGoogleDriveInvoiceAdapter({ config = {}, fetcher = globalT
     if (file.mimeType !== PDF_MIME || !file.id || !file.headRevisionId || file.appProperties?.lrs_period_key !== periodKey || file.appProperties?.lrs_technician_id !== technicianId) {
       throw providerError("drive_invoice_metadata_invalid");
     }
+    await pinRevision(file.id, file.headRevisionId);
     return summary(file);
   }
   function summary(file) {
@@ -199,6 +200,7 @@ export function createGoogleDriveInvoiceAdapter({ config = {}, fetcher = globalT
       const found = summary(prior);
       const expectedDigest = await sha256(bytes);
       if (found.pdfSha256 !== expectedDigest || found.periodKey !== props.lrs_period_key || found.technicianId !== props.lrs_technician_id) throw providerError("drive_idempotency_conflict");
+      await pinRevision(found.fileId, found.revisionId);
       return { fileId: found.fileId, revisionId: found.revisionId };
     }
     const parentId = await ensurePath(folderPath);
@@ -266,6 +268,7 @@ export function createGoogleDriveInvoiceAdapter({ config = {}, fetcher = globalT
       if (!file) return { state: "unsettled" };
       const record = summary(file);
       if (!record.revisionId || record.pdfSha256?.length !== 64) return { state: "unsettled" };
+      await pinRevision(record.fileId, record.revisionId);
       return { state: "succeeded", result: record };
     } catch (_) { return { state: "unsettled" }; }
   }

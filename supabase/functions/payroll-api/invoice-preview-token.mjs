@@ -75,7 +75,7 @@ export function createInvoicePreviewTokenService({ secret, now = () => Date.now(
       }
       const expected = expectedBinding(input);
       if (!validBinding(expected) || canonical(payload.binding) !== canonical(expected)) return { approved: false };
-      return { approved: true, deliveryAttemptId: payload.deliveryAttemptId, binding: payload.binding };
+      return { approved: true, deliveryAttemptId: payload.deliveryAttemptId, expiresAt: new Date(payload.expiresAt).toISOString(), binding: payload.binding };
     } catch (_) {
       return { approved: false };
     }

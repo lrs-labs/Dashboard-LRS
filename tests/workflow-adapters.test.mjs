@@ -35,8 +35,10 @@ function fakeJobs() {
     },
     async claimExpiredQueued(key, input) {
       const row = rows.get(key);
-      if (!row || row.state !== "queued" || row.lease_expires_at !== input.expectedLeaseExpiresAt || Date.parse(row.lease_expires_at) > Date.now()) return false;
-      rows.set(key, { ...row, state: "running", started_at: input.startedAt, lease_expires_at: input.leaseExpiresAt });
+      if (!row || row.state !== "queued" || row.lease_expires_at !== input.expectedLeaseExpiresAt || Date.parse(row.lease_expires_at) > Date.now() ||
+          row.attempt_count !== 0 || row.started_at != null || row.result_code != null || row.result_payload != null ||
+          row.completed_at != null || row.reconciled_at != null) return false;
+      rows.set(key, { ...row, state: "running", started_at: input.startedAt, lease_expires_at: input.leaseExpiresAt, attempt_count: 1 });
       return true;
     },
     async transition(key, state, patch = {}) { rows.set(key, { ...rows.get(key), ...patch, state }); }
@@ -93,7 +95,8 @@ test("expired queued jobs can be recovered because no provider effect began befo
   const requestDigest = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
   const jobs = fakeJobs();
   jobs.rows.set(key, { idempotency_key: key, job_type: "invoice_drive", period_key: rawSnapshot.periodKey,
-    technician_id: "tech-1", request_digest: requestDigest, state: "queued", lease_expires_at: "2000-01-01T00:00:00.000Z" });
+    technician_id: "tech-1", request_digest: requestDigest, state: "queued", lease_expires_at: "2000-01-01T00:00:00.000Z",
+    attempt_count: 0, started_at: null, result_code: null, result_payload: null, completed_at: null, reconciled_at: null });
   let creates = 0;
   const drive = { async findCurrentInvoice() { return null; }, async createInvoice() { creates++; return { fileId: "recovered-file", revisionId: "recovered-rev" }; } };
   const first = await archiveClosedInvoice({ snapshot: rawSnapshot, technicianId: "tech-1", technicianName: "Fixture Tech", pdfBytes: pdf,
@@ -144,6 +147,76 @@ test("email requires a verified archive and a preview bound to its PDF revision 
   assert.equal("to" in verifies[0], false);
   assert.deepEqual(sends[0].archive, { fileId: archived.fileId, revisionId: archived.revisionId, pdfSha256 });
   assert.equal([...audit.events.values()][0].outcome, "succeeded");
+});
+
+test("sendVerifiedInvoice resumes only its own expired, provably unstarted queued attempt", async () => {
+  const deliveryAttemptId = "attempt-expired-queue-fixture";
+  const identity = { jobType: "invoice_email", periodKey: "2026-10-Q1", technicianId: "tech-1",
+    version: "sheet-version-7", deliveryAttemptId };
+  const idempotencyKey = await makeWorkflowIdempotencyKey(identity);
+  const payload = { ...identity, recipientId: "recipient-fixture-id", directoryVersion: "directory-v1",
+    fileId: archived.fileId, fileRevisionId: archived.revisionId, pdfSha256 };
+  const queued = { idempotency_key: idempotencyKey, job_type: "invoice_email", period_key: identity.periodKey,
+    technician_id: identity.technicianId, request_digest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+    state: "queued", lease_expires_at: "2000-01-01T00:00:00.000Z", attempt_count: 0, started_at: null,
+    result_code: null, result_payload: null, completed_at: null, reconciled_at: null };
+  const jobs = fakeJobs();
+  jobs.rows.set(idempotencyKey, queued);
+  let sends = 0, claims = 0;
+  const originalClaim = jobs.claimExpiredQueued;
+  jobs.claimExpiredQueued = async (...args) => { claims++; return originalClaim(...args); };
+  const recipientDirectory = { async resolve(id) { return { technicianId: id, directoryId: "recipient-fixture-id",
+    directoryVersion: "directory-v1", email: "fixture@example.invalid", active: true, verified: true }; } };
+  const previewVerifier = { async verify(input) { return { approved: input.token === "same-attempt-preview",
+    deliveryAttemptId, binding: { snapshotId: input.snapshotId, sourceRevision: input.sourceRevision,
+      technicianId: input.technicianId, fileId: input.archive.fileId, revisionId: input.archive.revisionId,
+      pdfSha256: input.archive.pdfSha256, recipientDirectoryId: input.recipient.directoryId,
+      directoryVersion: input.recipient.directoryVersion, recipientEmail: input.recipient.email, actorId: input.actorId } }; } };
+  const result = await sendVerifiedInvoice({ snapshot: snapshot(), technicianId: "tech-1", archivedFile: archived,
+    pdfBytes: pdf, recipientDirectory, previewVerifier, previewToken: "same-attempt-preview",
+    mailer: { async send() { sends++; return { messageId: "email-recovered-fixture" }; } }, jobs, audit: fakeAudit() });
+  assert.equal(result.state, "succeeded");
+  assert.equal(result.result.messageId, "email-recovered-fixture");
+  assert.equal(sends, 1);
+  assert.equal(claims, 1);
+  assert.equal(jobs.rows.get(idempotencyKey).attempt_count, 1);
+});
+
+test("sendVerifiedInvoice never reclaims another attempt or queued rows with execution evidence", async () => {
+  const deliveryAttemptId = "attempt-unsafe-queue-fixture";
+  const identity = { jobType: "invoice_email", periodKey: "2026-10-Q1", technicianId: "tech-1",
+    version: "sheet-version-7", deliveryAttemptId };
+  const idempotencyKey = await makeWorkflowIdempotencyKey(identity);
+  const payload = { ...identity, recipientId: "recipient-fixture-id", directoryVersion: "directory-v1",
+    fileId: archived.fileId, fileRevisionId: archived.revisionId, pdfSha256 };
+  const base = { idempotency_key: idempotencyKey, job_type: "invoice_email", period_key: identity.periodKey,
+    technician_id: identity.technicianId, request_digest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+    state: "queued", lease_expires_at: "2000-01-01T00:00:00.000Z", attempt_count: 0, started_at: null,
+    result_code: null, result_payload: null, completed_at: null, reconciled_at: null };
+  const recipientDirectory = { async resolve(id) { return { technicianId: id, directoryId: "recipient-fixture-id",
+    directoryVersion: "directory-v1", email: "fixture@example.invalid", active: true, verified: true }; } };
+  const previewVerifier = { async verify(input) { return { approved: true, deliveryAttemptId,
+    binding: { snapshotId: input.snapshotId, sourceRevision: input.sourceRevision, technicianId: input.technicianId,
+      fileId: input.archive.fileId, revisionId: input.archive.revisionId, pdfSha256: input.archive.pdfSha256,
+      recipientDirectoryId: input.recipient.directoryId, directoryVersion: input.recipient.directoryVersion,
+      recipientEmail: input.recipient.email, actorId: input.actorId } }; } };
+  for (const unsafe of [
+    { ...base, idempotency_key: "other-attempt-key", started_at: "2000-01-01T00:00:00.000Z" },
+    { ...base, started_at: "2000-01-01T00:00:00.000Z", attempt_count: 1 },
+    { ...base, attempt_count: 1 }
+  ]) {
+    const jobs = fakeJobs();
+    jobs.rows.set(unsafe.idempotency_key, unsafe);
+    let sends = 0, claims = 0;
+    const claim = jobs.claimExpiredQueued;
+    jobs.claimExpiredQueued = async (...args) => { claims++; return claim(...args); };
+    const result = await sendVerifiedInvoice({ snapshot: snapshot(), technicianId: "tech-1", archivedFile: archived,
+      pdfBytes: pdf, recipientDirectory, previewVerifier, previewToken: "same-attempt-preview",
+      mailer: { async send() { sends++; return { messageId: "must-not-send" }; } }, jobs, audit: fakeAudit() });
+    assert.equal(result.state, "reconcile_required");
+    assert.equal(sends, 0);
+    assert.equal(claims, 0);
+  }
 });
 
 test("email rejects unverified recipients, unapproved previews and unknown outcomes without resend", async () => {

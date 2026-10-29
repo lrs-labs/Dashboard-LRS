@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { createPayrollWorkflowHandler } from "../supabase/functions/payroll-api/workflow-http.mjs";
 import { createInvoicePreviewTokenService } from "../supabase/functions/payroll-api/invoice-preview-token.mjs";
 import { PAYROLL_API_BODY_LIMIT_BYTES, readRequestBodyLimited } from "../supabase/functions/payroll-api/request-body-limit.mjs";
+import { makeWorkflowIdempotencyKey } from "../supabase/functions/payroll-api/workflow-idempotency.mjs";
 
 const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic workflow fixture");
 function closedSnapshot() {
@@ -13,13 +14,22 @@ function closedSnapshot() {
 }
 function jobs() {
   const rows = new Map();
-  return { async get(key) { return rows.get(key) || null; }, async findUnresolvedEmail({ periodKey, technicianId }) {
+  return { rows, async get(key) { return rows.get(key) || null; }, async findUnresolvedEmail({ periodKey, technicianId }) {
     return [...rows.values()].filter(row => row.job_type === "invoice_email" && row.period_key === periodKey && row.technician_id === technicianId && ["queued", "running", "unknown", "needs_review"].includes(row.state));
   }, async insertQueued(row) {
     if (row.job_type === "invoice_email" && [...rows.values()].some(existing => existing.job_type === "invoice_email" && existing.period_key === row.period_key && existing.technician_id === row.technician_id && ["queued", "running", "unknown", "needs_review"].includes(existing.state))) return false;
     if (rows.has(row.idempotency_key)) return false;
-    rows.set(row.idempotency_key, { ...row, state: "queued" }); return true;
-  }, async transition(key, state, patch = {}) { rows.set(key, { ...rows.get(key), ...patch, state }); } };
+    rows.set(row.idempotency_key, { ...row, state: "queued", attempt_count: 0, started_at: null }); return true;
+  }, async claimExpiredQueued(key, input) {
+    const row = rows.get(key);
+    if (!row || row.state !== "queued" || row.lease_expires_at !== input.expectedLeaseExpiresAt || Date.parse(row.lease_expires_at) > Date.now() ||
+        row.started_at || row.attempt_count !== 0 || row.result_code || row.result_payload || row.completed_at || row.reconciled_at) return false;
+    rows.set(key, { ...row, state: "running", started_at: input.startedAt, lease_expires_at: input.leaseExpiresAt, attempt_count: 1 });
+    return true;
+  }, async transition(key, state, patch = {}) {
+    const row = rows.get(key);
+    rows.set(key, { ...row, ...patch, state, attempt_count: row.attempt_count + (state === "running" ? 1 : 0) });
+  } };
 }
 function setup(overrides = {}) {
   const calls = [];
@@ -172,6 +182,64 @@ test("email-only retry uses the current archived PDF and never changes Drive", a
   assert.equal(sent.status, 200);
   assert.equal(setupValue.calls.filter(call => call.startsWith("drive-")).length, 0);
   assert.equal(setupValue.calls.filter(call => call === "email-send").length, 1);
+});
+
+test("retry preview can resume only its own expired unstarted email job using the original signed token", async () => {
+  const setupValue = setup();
+  const archived = await setupValue.handler({ body: { action: "invoice.archive", operation: "drive-and-send", periodKey: "2026-10-Q1",
+    snapshotId: "snapshot-fixture-q1", technicianId: "tech-fixture-1" } });
+  assert.equal(archived.status, 200);
+  const deliveryAttemptId = "delivery-attempt-fixture";
+  const identity = { jobType: "invoice_email", periodKey: "2026-10-Q1", technicianId: "tech-fixture-1",
+    version: "sheet-revision-fixture-1", deliveryAttemptId };
+  const idempotencyKey = await makeWorkflowIdempotencyKey(identity);
+  const payload = { ...identity, recipientId: "recipient-fixture-1", directoryVersion: "directory-v1",
+    fileId: "drive-fixture-1", fileRevisionId: "revision-v1", pdfSha256: createHash("sha256").update(PDF).digest("hex") };
+  setupValue.jobs.rows.set(idempotencyKey, { idempotency_key: idempotencyKey, job_type: "invoice_email", period_key: "2026-10-Q1",
+    technician_id: "tech-fixture-1", source_snapshot_ref: "snapshot-fixture-q1",
+    request_digest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), state: "queued",
+    lease_expires_at: "2000-01-01T00:00:00.000Z", attempt_count: 0, started_at: null,
+    result_code: null, result_payload: null, completed_at: null, reconciled_at: null });
+
+  const resumedPreview = await setupValue.handler({ body: { action: "invoice.retry-preview", periodKey: "2026-10-Q1",
+    snapshotId: "snapshot-fixture-q1", technicianId: "tech-fixture-1", previewToken: archived.body.emailPreview.token } });
+  assert.equal(resumedPreview.status, 200);
+  assert.equal(resumedPreview.body.emailPreview.token, archived.body.emailPreview.token);
+  const sent = await setupValue.handler({ body: { action: "invoice.retry-confirm", periodKey: "2026-10-Q1",
+    snapshotId: "snapshot-fixture-q1", technicianId: "tech-fixture-1", previewToken: resumedPreview.body.emailPreview.token } });
+  assert.equal(sent.status, 200);
+  assert.equal(sent.body.email.result.messageId, "mail-fixture-1");
+  assert.equal(setupValue.calls.filter(call => call === "email-send").length, 1);
+  assert.equal(setupValue.jobs.rows.get(idempotencyKey).state, "succeeded");
+});
+
+test("HTTP retry preview refuses a different or started queued send even when supplied a valid old token", async () => {
+  for (const mutation of [
+    row => ({ ...row, idempotency_key: "other-attempt-key" }),
+    row => ({ ...row, state: "running", started_at: "2000-01-01T00:00:00.000Z" }),
+    row => ({ ...row, attempt_count: 1 }),
+    row => ({ ...row, result_payload: { messageId: "unverified-existing-effect" } })
+  ]) {
+    const setupValue = setup();
+    const archived = await setupValue.handler({ body: { action: "invoice.archive", operation: "drive-and-send", periodKey: "2026-10-Q1",
+      snapshotId: "snapshot-fixture-q1", technicianId: "tech-fixture-1" } });
+    const identity = { jobType: "invoice_email", periodKey: "2026-10-Q1", technicianId: "tech-fixture-1",
+      version: "sheet-revision-fixture-1", deliveryAttemptId: "delivery-attempt-fixture" };
+    const idempotencyKey = await makeWorkflowIdempotencyKey(identity);
+    const payload = { ...identity, recipientId: "recipient-fixture-1", directoryVersion: "directory-v1",
+      fileId: "drive-fixture-1", fileRevisionId: "revision-v1", pdfSha256: createHash("sha256").update(PDF).digest("hex") };
+    const row = { idempotency_key: idempotencyKey, job_type: "invoice_email", period_key: identity.periodKey,
+      technician_id: identity.technicianId, request_digest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+      state: "queued", lease_expires_at: "2000-01-01T00:00:00.000Z", attempt_count: 0, started_at: null,
+      result_code: null, result_payload: null, completed_at: null, reconciled_at: null };
+    const unsafe = mutation(row);
+    setupValue.jobs.rows.set(unsafe.idempotency_key, unsafe);
+    const result = await setupValue.handler({ body: { action: "invoice.retry-preview", periodKey: "2026-10-Q1",
+      snapshotId: "snapshot-fixture-q1", technicianId: "tech-fixture-1", previewToken: archived.body.emailPreview.token } });
+    assert.equal(result.status, 409);
+    assert.equal(result.body.error, "previous_email_outcome_requires_reconciliation");
+    assert.equal(setupValue.calls.includes("email-send"), false);
+  }
 });
 
 test("a new email preview is blocked while the previous send response is uncertain", async () => {

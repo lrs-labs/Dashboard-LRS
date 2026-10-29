@@ -1,9 +1,10 @@
-import { archiveClosedInvoice, sendVerifiedInvoice, validateClosedPayrollSnapshot } from "./workflow-adapters.mjs";
+import { archiveClosedInvoice, isProvablyUnstartedExpiredQueued, sendVerifiedInvoice, validateClosedPayrollSnapshot } from "./workflow-adapters.mjs";
+import { makeWorkflowIdempotencyKey } from "./workflow-idempotency.mjs";
 
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])-Q[12]$/;
 const ACTION_FIELDS = Object.freeze({
   "invoice.archive": ["action", "operation", "periodKey", "snapshotId", "technicianId"],
-  "invoice.retry-preview": ["action", "periodKey", "snapshotId", "technicianId"],
+  "invoice.retry-preview": ["action", "periodKey", "snapshotId", "technicianId", "previewToken"],
   "invoice.send-confirm": ["action", "periodKey", "snapshotId", "technicianId", "previewToken"],
   "invoice.retry-confirm": ["action", "periodKey", "snapshotId", "technicianId", "previewToken"]
 });
@@ -32,6 +33,7 @@ function validRequest(body) {
       !text(body.technicianId) || text(body.technicianId).length > 160) return false;
   if (body.action === "invoice.archive" && !["drive-only", "drive-and-send"].includes(body.operation)) return false;
   if (body.action !== "invoice.archive" && body.operation !== undefined) return false;
+  if (body.action === "invoice.retry-preview" && body.previewToken !== undefined && (!text(body.previewToken) || body.previewToken.length > 4096)) return false;
   if (["invoice.send-confirm", "invoice.retry-confirm"].includes(body.action) && (!text(body.previewToken) || body.previewToken.length > 4096)) return false;
   return true;
 }
@@ -94,7 +96,8 @@ export function createPayrollWorkflowHandler(dependencies = {}) {
 
       if (body.action === "invoice.retry-preview") {
         const current = await dependencies.drive.getCurrentInvoice({ periodKey: snapshot.periodKey, technicianId });
-        const preview = await issueSendPreview({ dependencies, snapshot, technicianId, invoice, pdfBytes, archivedFile: current, actorId });
+        const preview = await issueSendPreview({ dependencies, snapshot, technicianId, invoice, pdfBytes, archivedFile: current, actorId,
+          previousPreviewToken: body.previewToken });
         return preview.status === 200 ? response(200, { state: "confirmation_required", emailPreview: preview.body }) : preview;
       }
 
@@ -107,7 +110,8 @@ export function createPayrollWorkflowHandler(dependencies = {}) {
       const email = await sendVerifiedInvoice({ snapshot, technicianId, archivedFile: current, pdfBytes,
         recipientDirectory: dependencies.recipientDirectory, mailer: dependencies.mailer,
         previewVerifier: dependencies.previewVerifier, previewToken: body.previewToken,
-        jobs: dependencies.jobs, audit: dependencies.audit, actorId });
+        jobs: dependencies.jobs, audit: dependencies.audit, actorId,
+        now: typeof dependencies.now === "function" ? new Date(dependencies.now()) : new Date() });
       if (email.state !== "succeeded") return response(email.state === "unknown" || email.state === "reconcile_required" ? 409 : 502,
         { state: email.state, error: "email_operation_requires_reconciliation" });
       return response(200, { state: "sent", email: { state: email.state, result: email.result, auditPending: email.auditPending === true } });
@@ -123,11 +127,10 @@ export function createPayrollWorkflowHandler(dependencies = {}) {
   };
 }
 
-async function issueSendPreview({ dependencies, snapshot, technicianId, invoice, pdfBytes, archivedFile, actorId }) {
+async function issueSendPreview({ dependencies, snapshot, technicianId, invoice, pdfBytes, archivedFile, actorId, previousPreviewToken }) {
   if (typeof dependencies.jobs?.findUnresolvedEmail !== "function") return response(503, { error: "payroll_workflow_provider_not_configured" });
   const unresolved = await dependencies.jobs.findUnresolvedEmail({ periodKey: snapshot.periodKey, technicianId });
   if (!Array.isArray(unresolved)) return response(503, { error: "payroll_workflow_provider_not_configured" });
-  if (unresolved.length) return response(409, { error: "previous_email_outcome_requires_reconciliation" });
   const pdfSha256 = await digestHex(pdfBytes);
   if (!archivedFile || archivedFile.state !== "stored" || !archivedFile.fileId || !archivedFile.revisionId ||
       archivedFile.snapshotId !== snapshot.id || archivedFile.periodKey !== snapshot.periodKey ||
@@ -145,6 +148,34 @@ async function issueSendPreview({ dependencies, snapshot, technicianId, invoice,
     recipientDirectoryId: recipient.directoryId, directoryVersion: recipient.directoryVersion,
     recipientEmail: recipient.email, actorId
   };
+  if (unresolved.length) {
+    if (!previousPreviewToken || unresolved.length !== 1) return response(409, { error: "previous_email_outcome_requires_reconciliation" });
+    const approval = await dependencies.previewVerifier.verify({ token: previousPreviewToken, ...binding,
+      archive: { fileId: archivedFile.fileId, revisionId: archivedFile.revisionId, pdfSha256 },
+      recipient: { directoryId: recipient.directoryId, directoryVersion: recipient.directoryVersion, email: recipient.email } });
+    const attemptId = approval?.deliveryAttemptId;
+    if (approval?.approved !== true || typeof attemptId !== "string" || !attemptId.trim()) {
+      return response(409, { error: "original_email_preview_invalid_or_expired" });
+    }
+    const identity = { jobType: "invoice_email", periodKey: snapshot.periodKey, technicianId,
+      version: snapshot.sourceRevision, deliveryAttemptId: attemptId };
+    const idempotencyKey = await makeWorkflowIdempotencyKey(identity);
+    const job = unresolved[0];
+    const payload = { ...identity, recipientId: recipient.directoryId, directoryVersion: recipient.directoryVersion,
+      fileId: archivedFile.fileId, fileRevisionId: archivedFile.revisionId, pdfSha256 };
+    const digest = await digestHex(new TextEncoder().encode(JSON.stringify(payload)));
+    const now = typeof dependencies.now === "function" ? new Date(dependencies.now()) : new Date();
+    if (job?.idempotency_key !== idempotencyKey || job?.job_type !== "invoice_email" || job?.period_key !== snapshot.periodKey ||
+        job?.technician_id !== technicianId || job?.request_digest !== digest || !isProvablyUnstartedExpiredQueued(job, now)) {
+      return response(409, { error: "previous_email_outcome_requires_reconciliation" });
+    }
+    return response(200, {
+      recipient: recipient.email, token: previousPreviewToken, expiresAt: approval.expiresAt || null,
+      archive: { fileId: archivedFile.fileId, revisionId: archivedFile.revisionId, pdfSha256 },
+      technician: invoice.technician, periodKey: snapshot.periodKey, resumingAttempt: true
+    });
+  }
+  if (previousPreviewToken) return response(409, { error: "no_matching_queued_email_attempt" });
   const issued = await dependencies.previewSigner.issue(binding);
   if (!issued?.token || !issued.deliveryAttemptId || !issued.expiresAt) return response(503, { error: "recipient_preview_unavailable" });
   return response(200, {

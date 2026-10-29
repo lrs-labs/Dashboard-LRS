@@ -98,6 +98,25 @@ test("ambiguous metadata, changed source fingerprint, and a manual paid flag blo
   assert.equal(manuallyPaid.requests.some(item => item.path.endsWith("/values:batchUpdateByDataFilter")), false);
 });
 
+test("preflight accepts a paid flag only when the closed snapshot job durably attributes that exact slot", async () => {
+  const line = await lineFixture();
+  const alreadyPaid = makeFetcher({ initialPaid: true });
+  const writer = createGoogleSheetsPaidFlagWriter({ config: BASE_CONFIG, core: Payroll, fetcher: alreadyPaid.fetcher });
+  assert.deepEqual(await writer.preflightClosedSnapshot({ snapshot: snapshot(line), attributedPaidAssignments: [] }),
+    { state: "needs_review", reason: "manual_payment_conflict" });
+  assert.deepEqual(await writer.preflightClosedSnapshot({ snapshot: snapshot(line), attributedPaidAssignments: [
+    { assignmentId: line.assignmentId, role: line.role, idempotencyKey: "fixture-calendar-job" }
+  ] }), { state: "ready" });
+
+  const missingWrite = makeFetcher({ initialPaid: false });
+  const missingWriter = createGoogleSheetsPaidFlagWriter({ config: BASE_CONFIG, core: Payroll, fetcher: missingWrite.fetcher });
+  assert.deepEqual(await missingWriter.preflightClosedSnapshot({ snapshot: snapshot(line), attributedPaidAssignments: [
+    { assignmentId: line.assignmentId, role: line.role, idempotencyKey: "fixture-calendar-job" }
+  ] }), { state: "needs_review", reason: "automated_payment_flag_missing" });
+  assert.equal(alreadyPaid.requests.some(item => item.path.endsWith("/values:batchUpdateByDataFilter")), false);
+  assert.equal(missingWrite.requests.some(item => item.path.endsWith("/values:batchUpdateByDataFilter")), false);
+});
+
 test("lost Sheets write response is surfaced as unknown and never blindly retried", async () => {
   const fixture = makeFetcher({ loseWrite: true });
   const writer = createGoogleSheetsPaidFlagWriter({ config: BASE_CONFIG, core: Payroll, fetcher: fixture.fetcher });

@@ -47,7 +47,7 @@ export function createPayrollCalendarPaymentWorker({ enabled = false, snapshotSt
         const result = await executeScheduledAdministrativeMarks({ snapshot, now, writer, jobs, audit });
         periods.push({ periodKey: snapshot.periodKey, ...result });
       }
-      const needsReview = periods.some(item => ["needs_review", "missed_run_review", "unknown", "reconcile_required"].includes(item.state));
+      const needsReview = periods.some(item => ["needs_review", "missed_run_review", "unknown", "reconcile_required", "queued", "failed"].includes(item.state));
       return { state: needsReview ? "completed_with_review" : "succeeded", date: today, timeZone: "America/New_York", periods };
     }
   });

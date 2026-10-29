@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createGoogleDriveInvoiceAdapter, createGmailInvoiceMailer } from "../supabase/functions/payroll-api/google-workflow-adapters.mjs";
+import { reconcileWorkflowAttempt } from "../supabase/functions/payroll-api/workflow-adapters.mjs";
 
 const PDF = new TextEncoder().encode("%PDF-1.7\nsynthetic invoice");
 const driveConfig = { enabled: true, rootFolderId: "folder-root-fixture", getAccessToken: async () => "server-token-fixture" };
@@ -130,6 +131,73 @@ test("Drive archive does not report success when persisted revision retention ca
     return /retention_unverified/.test(error.message);
   });
   assert.equal(retentionReads, 1);
+});
+
+test("Drive reconciliation succeeds only after the exact revision is pinned and read back", async () => {
+  async function reconcileWithRetention(keepForever) {
+    const events = [];
+    const key = "operation-reconcile-retention-fixture";
+    const file = { id: "drive-reconcile-fixture", mimeType: "application/pdf", headRevisionId: "revision-reconcile-fixture",
+      appProperties: { lrs_period_key: "2026-10-Q1", lrs_technician_id: "tech-fixture-1", lrs_snapshot_id: "snapshot-fixture-1",
+        lrs_source_revision: "source-revision-fixture", lrs_pdf_sha256: "a".repeat(64), lrs_operation_key: key } };
+    const fetcher = async (url, options = {}) => {
+      const parsed = new URL(String(url));
+      events.push(`${options.method || "GET"}:${parsed.pathname}`);
+      if (parsed.pathname === "/drive/v3/files") return jsonResponse({ files: [file] });
+      if (parsed.pathname === "/drive/v3/files/drive-reconcile-fixture/revisions/revision-reconcile-fixture") {
+        return jsonResponse({ id: "revision-reconcile-fixture", keepForever: options.method === "PATCH" ? true : keepForever });
+      }
+      throw new Error(`unexpected_fixture_request:${parsed.pathname}`);
+    };
+    const adapter = createGoogleDriveInvoiceAdapter({ config: driveConfig, fetcher });
+    const row = { idempotency_key: key, job_type: "invoice_drive", period_key: "2026-10-Q1",
+      request_digest: "b".repeat(64), state: "running" };
+    const jobs = { async get() { return row; }, async transition(_key, state, patch) {
+      events.push(`job:${state}`); Object.assign(row, patch, { state }); return true;
+    } };
+    const result = await reconcileWorkflowAttempt({ jobs, idempotencyKey: key, jobType: "invoice_drive",
+      requestDigest: row.request_digest, lookupProviderResult: adapter.lookup,
+      audit: { async record() {} },
+      auditEvent: { idempotencyKey: key, origin: "user", action: "invoice_drive", entityType: "invoice_drive",
+        entityRef: "snapshot-fixture-1:tech-fixture-1", periodKey: "2026-10-Q1", outcome: "succeeded" } });
+    return { result, row, events };
+  }
+
+  const unverified = await reconcileWithRetention(false);
+  assert.equal(unverified.result.state, "reconcile_required");
+  assert.equal(unverified.row.state, "running");
+  assert.equal(unverified.events.includes("job:succeeded"), false);
+
+  const retained = await reconcileWithRetention(true);
+  assert.equal(retained.result.state, "succeeded");
+  assert.equal(retained.row.state, "succeeded");
+  assert.ok(retained.events.indexOf("PATCH:/drive/v3/files/drive-reconcile-fixture/revisions/revision-reconcile-fixture") < retained.events.indexOf("GET:/drive/v3/files/drive-reconcile-fixture/revisions/revision-reconcile-fixture"));
+  assert.ok(retained.events.indexOf("GET:/drive/v3/files/drive-reconcile-fixture/revisions/revision-reconcile-fixture") < retained.events.indexOf("job:succeeded"));
+});
+
+test("current Drive invoice lookup verifies retention before exposing the stored PDF as usable", async () => {
+  async function lookupWithRetention(persistedRetention) {
+    const events = [];
+    const file = { id: "drive-current-retention-fixture", mimeType: "application/pdf", headRevisionId: "revision-current-fixture",
+      appProperties: { lrs_period_key: "2026-10-Q1", lrs_technician_id: "tech-fixture-1", lrs_snapshot_id: "snapshot-fixture-1",
+        lrs_source_revision: "source-revision-fixture", lrs_pdf_sha256: "a".repeat(64) } };
+    const adapter = createGoogleDriveInvoiceAdapter({ config: driveConfig, fetcher: async (url, options = {}) => {
+      const parsed = new URL(String(url)); events.push(`${options.method || "GET"}:${parsed.pathname}`);
+      if (parsed.pathname === "/drive/v3/files") return jsonResponse({ files: [file] });
+      if (parsed.pathname.endsWith("/revisions/revision-current-fixture")) return jsonResponse({ id: "revision-current-fixture",
+        keepForever: options.method === "PATCH" ? true : persistedRetention });
+      throw new Error(`unexpected_fixture_request:${parsed.pathname}`);
+    } });
+    try { return { result: await adapter.getCurrentInvoice({ periodKey: "2026-10-Q1", technicianId: "tech-fixture-1" }), events }; }
+    catch (error) { return { error, events }; }
+  }
+  const missingRetention = await lookupWithRetention(false);
+  assert.match(missingRetention.error.message, /drive_revision_retention_unverified/);
+  assert.equal(missingRetention.error.outcomeUnknown, true);
+  const retained = await lookupWithRetention(true);
+  assert.equal(retained.result.state, "stored");
+  assert.ok(retained.events.some(event => event.startsWith("PATCH:")));
+  assert.ok(retained.events.some(event => event.startsWith("GET:") && event.includes("/revisions/")));
 });
 
 test("Gmail adapter sends only the verified target and exact PDF attachment; disabled mode makes no request", async () => {

@@ -389,7 +389,9 @@ BEGIN
   SET state = 'running', started_at = p_started_at, lease_expires_at = p_lease_expires_at,
       attempt_count = j.attempt_count + 1, updated_at = now()
   WHERE j.idempotency_key = p_idempotency_key AND j.state = 'queued'
-    AND j.lease_expires_at = p_expected_lease_expires_at AND j.lease_expires_at <= now();
+    AND j.lease_expires_at = p_expected_lease_expires_at AND j.lease_expires_at <= now()
+    AND j.attempt_count = 0 AND j.started_at IS NULL AND j.result_code IS NULL
+    AND j.result_payload IS NULL AND j.completed_at IS NULL AND j.reconciled_at IS NULL;
   GET DIAGNOSTICS changed_count = ROW_COUNT;
   RETURN changed_count = 1;
 END
@@ -397,3 +399,37 @@ $$;
 
 REVOKE ALL ON FUNCTION public.lrs_workflow_job_claim_expired_queued(text, timestamptz, timestamptz, timestamptz) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.lrs_workflow_job_claim_expired_queued(text, timestamptz, timestamptz, timestamptz) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.lrs_workflow_calendar_mark_retry_no_effect(
+  p_idempotency_key text,
+  p_request_digest text,
+  p_started_at timestamptz,
+  p_lease_expires_at timestamptz
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  changed_count integer;
+BEGIN
+  IF p_idempotency_key IS NULL OR p_request_digest IS NULL OR p_request_digest !~ '^[a-f0-9]{64}$'
+     OR p_started_at IS NULL OR p_lease_expires_at IS NULL OR p_lease_expires_at <= now() THEN
+    RAISE EXCEPTION 'invalid_calendar_mark_retry';
+  END IF;
+  UPDATE private.workflow_jobs AS j
+  SET state = 'running', started_at = p_started_at, lease_expires_at = p_lease_expires_at,
+      result_code = NULL, result_payload = NULL, completed_at = NULL, reconciled_at = NULL,
+      attempt_count = j.attempt_count + 1, updated_at = now()
+  WHERE j.idempotency_key = p_idempotency_key AND j.job_type = 'calendar_mark'
+    AND j.state = 'failed' AND j.request_digest = p_request_digest
+    AND j.result_code = 'failed'
+    AND j.result_payload ->> 'failureClass' = 'provider_declined_without_effect';
+  GET DIAGNOSTICS changed_count = ROW_COUNT;
+  RETURN changed_count = 1;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.lrs_workflow_calendar_mark_retry_no_effect(text, text, timestamptz, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.lrs_workflow_calendar_mark_retry_no_effect(text, text, timestamptz, timestamptz) TO service_role;
