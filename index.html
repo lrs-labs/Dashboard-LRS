@@ -1439,7 +1439,7 @@ function renderPayroll(){
     ["Total de la vista",payrollMoney(total),`${fmt(lines.length)} slots de técnico`],
     ["Pagado según Sheet",payrollMoney(paid),"Casillas AF–AH marcadas"],
     ["Pendiente en Sheet",payrollMoney(pending),"Importes sin marcar como pagados"],
-    ["Pago por revisar",payrollMoney(review),"Valor de pago no reconocido"]
+    ["Pago por revisar",payrollMoney(review),"Flag ausente o no reconocido"]
   ].map(([lab,val,sub])=>`<div class="payroll-kpi"><div class="lab">${lab}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`).join("");
   const invoiceEnabled=payrollPeriodSelected();
   document.getElementById("payrollSummaryHint").textContent=invoiceEnabled ? `${PayrollCore.periodLabel(PAYROLL_FILTERS.year,PAYROLL_FILTERS.month,PAYROLL_FILTERS.half)} · el PDF individual incluye la quincena completa y todos sus estados de pago` : "Selecciona año, mes y quincena para habilitar el invoice individual";
