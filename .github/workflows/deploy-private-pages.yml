@@ -1,0 +1,62 @@
+name: Deploy private Pages entries
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-lrs-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the main site
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the allowlisted Pages artifact
+        env:
+          LRS_SUPABASE_URL: ${{ vars.LRS_SUPABASE_URL }}
+          LRS_SUPABASE_PUBLISHABLE_KEY: ${{ vars.LRS_SUPABASE_PUBLISHABLE_KEY }}
+          LRS_PRIVATE_APP_ORIGIN: ${{ vars.LRS_PRIVATE_APP_ORIGIN }}
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site/tests _site/supabase/functions/payroll-api
+          cp index.html payroll-core.js _site/
+          cp tests/payroll-core.test.cjs _site/tests/
+          cp private-dashboard.html private-dashboard-ui.mjs private-dashboard-view.mjs private-runtime-config.js private-runtime-bootstrap.mjs private-auth-runtime.mjs secure-dashboard-client.mjs secure-dashboard-adapter.mjs payroll-private.html payroll-core-private.js secure-payroll-ui.mjs secure-payroll-client.mjs payroll-private-view.mjs payroll-invoice-pdf.mjs session-lease.mjs _site/
+          cp supabase/functions/payroll-api/policy.mjs _site/supabase/functions/payroll-api/
+          node scripts/inject-pages-runtime-config.mjs --artifact-dir _site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
