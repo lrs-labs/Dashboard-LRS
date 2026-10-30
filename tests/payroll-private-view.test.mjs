@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import Payroll from "../payroll-core.js";
+import Payroll from "../payroll-core-private.js";
 import { buildPayrollInvoice, filterPayrollLines, getPayrollPeriodOptions, getPayrollReviewMetrics } from "../payroll-private-view.mjs";
 
 const row = overrides => ({
