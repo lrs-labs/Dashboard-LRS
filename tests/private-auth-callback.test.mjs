@@ -39,6 +39,7 @@ async function makeRuntime(href, createAuth = () => ({})) {
     runtimeConfig: config,
     globalObject: { location, history },
     sessionStorage: memoryStorage(),
+    verifierStorage: memoryStorage(),
     loadSdk: async () => (...args) => {
       sdkArgs = args;
       return authClient;
@@ -62,8 +63,11 @@ test("default Supabase invite fragment is consumed before PKCE SDK auto-detectio
     })
   );
 
-  assert.deepEqual(harness.getSdkArgs()[2].auth, {
-    storage: harness.runtime.sessionStorage,
+  const authOptions = harness.getSdkArgs()[2].auth;
+  assert.notEqual(authOptions.storage, harness.runtime.sessionStorage);
+  assert.equal(typeof authOptions.storage.getItem, "function");
+  assert.deepEqual({ ...authOptions, storage: "adapter" }, {
+    storage: "adapter",
     storageKey: "lrs.private.auth.session",
     persistSession: true,
     autoRefreshToken: true,

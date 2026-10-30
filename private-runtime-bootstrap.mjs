@@ -70,6 +70,7 @@ export async function loadPrivateAuthRuntime(options = {}) {
     const createClient = await (options.loadSdk || (() => loadSupabaseSdk({ documentObject: options.documentObject, globalObject })))();
     const input = { config, createClient };
     if (Object.hasOwn(options, "sessionStorage")) input.sessionStorage = options.sessionStorage;
+    if (Object.hasOwn(options, "verifierStorage")) input.verifierStorage = options.verifierStorage;
     const runtime = createPrivateAuthRuntime(input, { getOrigin: () => origin });
     if (!runtime.authClient) return runtime;
     const authCallback = await consumePrivateAuthCallback(runtime.authClient.auth, {

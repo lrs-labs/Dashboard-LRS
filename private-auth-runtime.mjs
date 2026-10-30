@@ -1,10 +1,54 @@
 const STORAGE_KEY = "lrs.private.auth.session";
+const CODE_VERIFIER_TTL_MS = 10 * 60 * 1000;
 const CALLBACK_KEYS = Object.freeze([
   "access_token", "code", "error", "error_code", "error_description", "refresh_token", "token_hash", "type"
 ]);
 
 function browserSessionStorage() {
   try { return globalThis.sessionStorage; } catch (_) { return null; }
+}
+
+function browserVerifierStorage() {
+  try { return globalThis.localStorage; } catch (_) { return null; }
+}
+
+/**
+ * Supabase PKCE callbacks commonly open in a new tab from the email client.
+ * Share only the short-lived code verifier across same-origin tabs; keep the
+ * actual access/refresh-token session in per-tab sessionStorage.
+ */
+export function createPrivateAuthStorage({ sessionStorage, verifierStorage, now = () => Date.now(),
+  storageKey = STORAGE_KEY, verifierTtlMs = CODE_VERIFIER_TTL_MS } = {}) {
+  const verifierKey = `${storageKey}-code-verifier`;
+  const isVerifierKey = key => key === verifierKey;
+  return Object.freeze({
+    getItem(key) {
+      if (!isVerifierKey(key)) return sessionStorage?.getItem?.(key) ?? null;
+      let raw;
+      try { raw = verifierStorage?.getItem?.(key); } catch (_) { return null; }
+      if (raw == null) return null;
+      try {
+        const entry = JSON.parse(raw);
+        const age = now() - entry?.storedAt;
+        if (entry?.version === 1 && typeof entry.value === "string" && entry.value &&
+            Number.isFinite(entry.storedAt) && age >= 0 && age <= verifierTtlMs) return entry.value;
+      } catch (_) { /* Invalid or legacy verifier records are discarded below. */ }
+      try { verifierStorage?.removeItem?.(key); } catch (_) { /* Expired records must never be used. */ }
+      return null;
+    },
+    setItem(key, value) {
+      if (!isVerifierKey(key)) return sessionStorage?.setItem?.(key, value);
+      const storedAt = now();
+      if (typeof value !== "string" || !value || !Number.isFinite(storedAt)) throw new TypeError("invalid_code_verifier");
+      const entry = JSON.stringify({ version: 1, storedAt, value });
+      verifierStorage?.setItem?.(key, entry);
+      if (verifierStorage?.getItem?.(key) !== entry) throw new Error("code_verifier_storage_unavailable");
+    },
+    removeItem(key) {
+      if (!isVerifierKey(key)) return sessionStorage?.removeItem?.(key);
+      return verifierStorage?.removeItem?.(key);
+    }
+  });
 }
 
 function disabled(reason) {
@@ -95,6 +139,7 @@ export function createPrivateAuthRuntime(input = {}, { getOrigin = () => globalT
   const config = input?.config;
   const createClient = input?.createClient;
   const storage = input && Object.hasOwn(input, "sessionStorage") ? input.sessionStorage : browserSessionStorage();
+  const verifierStorage = input && Object.hasOwn(input, "verifierStorage") ? input.verifierStorage : browserVerifierStorage();
   if (!config || config.enabled !== true) return disabled("unconfigured");
   if (typeof config.supabaseUrl !== "string" || !isSupabasePublishableKey(config.publishableKey) ||
       typeof config.allowedOrigin !== "string" || !/^https:\/\//.test(config.allowedOrigin)) return disabled("runtime_config_invalid");
@@ -105,10 +150,11 @@ export function createPrivateAuthRuntime(input = {}, { getOrigin = () => globalT
   if (getOrigin() !== config.allowedOrigin) return disabled("origin_not_allowed");
   if (typeof createClient !== "function") return disabled("auth_sdk_unavailable");
   if (!storage || typeof storage.getItem !== "function" || typeof storage.setItem !== "function" || typeof storage.removeItem !== "function") return disabled("session_storage_unavailable");
+  if (!verifierStorage || typeof verifierStorage.getItem !== "function" || typeof verifierStorage.setItem !== "function" || typeof verifierStorage.removeItem !== "function") return disabled("pkce_storage_unavailable");
   try {
     const authClient = createClient(config.supabaseUrl, config.publishableKey, {
       auth: {
-        storage,
+        storage: createPrivateAuthStorage({ sessionStorage: storage, verifierStorage }),
         storageKey: STORAGE_KEY,
         persistSession: true,
         autoRefreshToken: true,
