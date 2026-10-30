@@ -28,6 +28,19 @@ test("private payroll page has no enabled paid-marking control", () => {
   assert.match(html, /no confirma una transferencia bancaria/i);
 });
 
+test("private payroll summary separates current-view payment and amount reviews from source-wide warnings", () => {
+  assert.match(html, /Importe calculado/);
+  assert.match(html, /Marcado pagado en hoja/);
+  assert.match(html, /Pendiente según casillas/);
+  assert.match(html, /Estados de pago por revisar/);
+  assert.match(html, /Importes por revisar/);
+  assert.match(html, /id="sourceReviewNote"[^>]*aria-live="polite"[^>]*hidden/i);
+  const source = readFileSync(new URL("../secure-payroll-ui.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /sourceReviewCount/);
+  assert.match(source, /Avisos globales de clasificación, separados del período/);
+  assert.match(source, /no se cuentan como asignaciones ni como saldo pendiente/i);
+});
+
 test("private payroll page uses its isolated core without replacing the public dashboard core", () => {
   assert.match(html, /<script src="\.\/payroll-core-private\.js" defer><\/script>/);
   assert.doesNotMatch(html, /<script src="\.\/payroll-core\.js" defer><\/script>/);

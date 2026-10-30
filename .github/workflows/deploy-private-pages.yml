@@ -24,6 +24,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Run automated tests
+        run: node --test tests/*.test.mjs tests/*.test.cjs
+
       - name: Build the allowlisted Pages artifact
         env:
           LRS_SUPABASE_URL: ${{ vars.LRS_SUPABASE_URL }}

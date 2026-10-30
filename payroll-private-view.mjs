@@ -44,6 +44,26 @@ export function filterPayrollLines(lines, filters, core) {
   });
 }
 
+/**
+ * Keep warnings tied to the active assignment view separate from source-wide
+ * records that cannot be classified into that view. The source counts are
+ * deliberately split by unit: rows, fee rows, and unassigned role slots.
+ */
+export function getPayrollReviewMetrics(filteredLines, sourceModel = {}) {
+  const lines = Array.isArray(filteredLines) ? filteredLines : [];
+  const reviewRows = Array.isArray(sourceModel.reviewRows) ? sourceModel.reviewRows : [];
+  const unassigned = Array.isArray(sourceModel.unassigned) ? sourceModel.unassigned : [];
+  return {
+    paymentFlagReviewCount: lines.filter(line =>
+      typeof line.amount === "number" && Number.isFinite(line.amount) && line.amount !== 0 && line.paidState === "review"
+    ).length,
+    amountReviewCount: lines.filter(line => typeof line.amount !== "number" || !Number.isFinite(line.amount)).length,
+    sourceUnclassifiedRowCount: reviewRows.filter(item => item?.reason === "missing-date" || item?.reason === "missing-period").length,
+    sourceFeeReviewRowCount: reviewRows.filter(item => item?.reason === "invalid-cancellation-fee-amount").length,
+    sourceUnassignedSlotCount: unassigned.length
+  };
+}
+
 export function buildPayrollInvoice(lines, technician, periodKey, core, { technicianId, generatedAt } = {}) {
   if (!core?.periodLabel || !core?.folio || !core?.summarize) throw new TypeError("payroll_core_required");
   const period = parsePeriodKey(periodKey);

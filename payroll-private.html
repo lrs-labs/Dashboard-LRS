@@ -89,7 +89,7 @@
     .button.primary { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
     .button[hidden] { display: none; }
     .button:disabled { cursor: wait; opacity: .66; }
-    .summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 18px 0 10px; }
     .metric { min-width: 0; border: 1px solid var(--line); border-radius: 15px; padding: 16px; background: var(--surface); }
     .metric.has-warning { border-color: color-mix(in srgb, var(--warning) 36%, var(--line)); }
     .metric-label { color: var(--muted); font-size: 12px; font-weight: 600; }
@@ -118,6 +118,8 @@
     .field input:focus-visible, .field select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     .filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; }
     .result-count, .muted-text { color: var(--muted); font-size: 12px; }
+    .source-review-note { margin: 0 0 18px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 15px; background: var(--surface-soft); color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .source-review-note[hidden] { display: none; }
     .report-action { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 16px; border: 1px solid var(--line); border-radius: 15px; padding: 16px; background: var(--surface-soft); }
     .report-action p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
     .invoice { margin-top: 20px; }
@@ -255,7 +257,7 @@
         <div class="field"><label for="filterStatus">Estado del trabajo</label><select id="filterStatus"><option value="">Todos los estados elegibles</option></select></div>
       </div>
       <div class="filter-actions">
-        <span id="resultsNote" class="muted-text" hidden>Hay importes cuyo estado administrativo requiere revisión.</span>
+        <span id="resultsNote" class="muted-text" hidden></span>
         <button id="resetFilters" class="button secondary" type="button">Restablecer filtros</button>
       </div>
       <div class="report-action">
@@ -266,11 +268,14 @@
 
     <section id="summary" class="summary" aria-label="Resumen de nómina" hidden>
       <div class="metric"><span class="metric-label">Asignaciones</span><strong id="lineCount" class="metric-value">0</strong></div>
-      <div class="metric"><span class="metric-label">Total asignado</span><strong id="totalAmount" class="metric-value">$0.00</strong></div>
-      <div class="metric"><span class="metric-label">Marcado pagado</span><strong id="paidAmount" class="metric-value">$0.00</strong></div>
-      <div class="metric"><span class="metric-label">Pendiente</span><strong id="pendingAmount" class="metric-value">$0.00</strong></div>
-      <div id="reviewMetric" class="metric"><span class="metric-label">Estados por revisar</span><strong id="reviewCount" class="metric-value">0</strong></div>
+      <div class="metric"><span class="metric-label">Importe calculado</span><strong id="totalAmount" class="metric-value">$0.00</strong></div>
+      <div class="metric"><span class="metric-label">Marcado pagado en hoja</span><strong id="paidAmount" class="metric-value">$0.00</strong></div>
+      <div class="metric"><span class="metric-label">Pendiente según casillas</span><strong id="pendingAmount" class="metric-value">$0.00</strong></div>
+      <div id="reviewMetric" class="metric"><span class="metric-label">Estados de pago por revisar</span><strong id="reviewCount" class="metric-value">0</strong></div>
+      <div id="amountReviewMetric" class="metric"><span class="metric-label">Importes por revisar</span><strong id="amountReviewCount" class="metric-value">0</strong></div>
     </section>
+
+    <p id="sourceReviewNote" class="source-review-note" role="status" aria-live="polite" hidden></p>
 
     <section id="records" class="panel" aria-label="Detalle de asignaciones" hidden>
       <div class="table-wrap" tabindex="0" aria-label="Tabla desplazable de asignaciones de nómina">

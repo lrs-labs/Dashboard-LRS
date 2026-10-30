@@ -1,6 +1,6 @@
 import { createSecurePayrollClient } from "./secure-payroll-client.mjs";
 import { loadPrivateAuthRuntime } from "./private-runtime-bootstrap.mjs";
-import { buildPayrollInvoice, filterPayrollLines, getPayrollPeriodOptions } from "./payroll-private-view.mjs";
+import { buildPayrollInvoice, filterPayrollLines, getPayrollPeriodOptions, getPayrollReviewMetrics } from "./payroll-private-view.mjs";
 import { generatePayrollInvoicePdf } from "./payroll-invoice-pdf.mjs";
 
 const runtime = await loadPrivateAuthRuntime();
@@ -26,7 +26,8 @@ const invoiceRows = $("invoiceRows");
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const dateFormat = new Intl.DateTimeFormat("es-US", { dateStyle: "medium", timeZone: "America/New_York" });
 let sourceLines = [];
-let sourceReviewCount = 0;
+let sourceReviewModel = { reviewRows: [], unassigned: [] };
+let sourceLoaded = false;
 let initializedFilters = false;
 let lastReadAt = null;
 let currentInvoice = null;
@@ -120,30 +121,41 @@ function clearTable() {
   records.hidden = true;
   filtersPanel.hidden = true;
   emptyState.hidden = true;
+  $("sourceReviewNote").hidden = true;
+  $("sourceReviewNote").textContent = "";
   $("invoiceLaunch").disabled = true;
   invoicePanel.hidden = true;
   invoiceHistory.hidden = true;
 }
 
-function renderSummary(lines, model) {
+function renderSummary(lines) {
   const totals = globalThis.PayrollCore.summarize(lines);
   const amountUnknown = lines.some(line => typeof line.amount !== "number" || !Number.isFinite(line.amount));
   const amount = amountUnknown ? null : lines.reduce((sum, line) => sum + line.amount, 0);
   const paid = totals.reduce((sum, item) => sum + item.paid, 0);
   const pending = totals.reduce((sum, item) => sum + item.pending, 0);
-  const reviewCount = lines.filter(line => line.paidState === "review").length + sourceReviewCount;
+  const reviewMetrics = getPayrollReviewMetrics(lines, sourceReviewModel);
 
   setText($("lineCount"), lines.length);
   setText($("totalAmount"), amount === null ? "Revisión requerida" : money.format(amount));
   setText($("paidAmount"), money.format(paid));
   setText($("pendingAmount"), money.format(pending));
-  setText($("reviewCount"), reviewCount);
-  $("reviewMetric").classList.toggle("has-warning", reviewCount > 0);
+  setText($("reviewCount"), reviewMetrics.paymentFlagReviewCount);
+  setText($("amountReviewCount"), reviewMetrics.amountReviewCount);
+  $("reviewMetric").classList.toggle("has-warning", reviewMetrics.paymentFlagReviewCount > 0);
+  $("amountReviewMetric").classList.toggle("has-warning", reviewMetrics.amountReviewCount > 0);
+
+  const globalCount = reviewMetrics.sourceUnclassifiedRowCount + reviewMetrics.sourceFeeReviewRowCount + reviewMetrics.sourceUnassignedSlotCount;
+  const sourceNote = $("sourceReviewNote");
+  sourceNote.hidden = globalCount === 0;
+  if (globalCount > 0) {
+    sourceNote.textContent = `Avisos globales de clasificación, separados del período y los totales visibles: ${reviewMetrics.sourceUnclassifiedRowCount} fila(s) sin fecha o quincena clasificable; ${reviewMetrics.sourceFeeReviewRowCount} fila(s) de cancelación con importe por revisar; ${reviewMetrics.sourceUnassignedSlotCount} casilla(s) de rol con importe y sin técnico asignado. No se cuentan como asignaciones ni como saldo pendiente de esta vista.`;
+  }
   summary.hidden = false;
-  return reviewCount;
+  return reviewMetrics;
 }
 
-function renderAssignments(lines, model) {
+function renderAssignments(lines) {
   rowsBody.replaceChildren();
   for (const line of lines) {
     const row = document.createElement("tr");
@@ -160,10 +172,10 @@ function renderAssignments(lines, model) {
   }
   records.hidden = lines.length === 0;
   emptyState.hidden = lines.length !== 0;
-  const reviewCount = renderSummary(lines, model);
+  const reviewMetrics = renderSummary(lines);
   const readLabel = lastReadAt ? `Lectura de la hoja: ${dateFormat.format(new Date(lastReadAt))}.` : "Lectura fresca de la hoja.";
-  if (reviewCount > 0) {
-    message.textContent = `${readLabel} ${reviewCount} registro(s) requieren revisión; la casilla no confirma una transferencia bancaria.`;
+  if (reviewMetrics.paymentFlagReviewCount > 0 || reviewMetrics.amountReviewCount > 0) {
+    message.textContent = `${readLabel} En esta vista: ${reviewMetrics.paymentFlagReviewCount} estado(s) de pago y ${reviewMetrics.amountReviewCount} importe(s) por revisar. Las casillas no confirman una transferencia bancaria.`;
   } else {
     message.textContent = `${readLabel} Los estados son administrativos y no confirman una transferencia bancaria.`;
   }
@@ -171,13 +183,15 @@ function renderAssignments(lines, model) {
 }
 
 function applyFilters() {
-  if (!sourceLines.length) return;
+  if (!sourceLoaded) return;
   const filtered = filterLines();
-  renderAssignments(filtered, { reviewRows: [], unassigned: [] });
-  const reviewCount = Number($("reviewCount").textContent);
+  renderAssignments(filtered);
+  const paymentReviewCount = Number($("reviewCount").textContent);
+  const amountReviewCount = Number($("amountReviewCount").textContent);
   setText($("resultCount"), `${filtered.length} asignaciones`);
-  if (reviewCount > 0) $("resultsNote").hidden = false;
-  else $("resultsNote").hidden = true;
+  const resultsNote = $("resultsNote");
+  resultsNote.hidden = paymentReviewCount === 0 && amountReviewCount === 0;
+  if (!resultsNote.hidden) resultsNote.textContent = `${paymentReviewCount} estado(s) de pago y ${amountReviewCount} importe(s) por revisar en las asignaciones de esta vista.`;
 }
 
 function updateInvoiceAction() {
@@ -276,20 +290,24 @@ function renderState(state) {
 
   if (state.status !== "ready" || !Array.isArray(state.rows)) {
     sourceLines = [];
+    sourceReviewModel = { reviewRows: [], unassigned: [] };
+    sourceLoaded = false;
     clearTable();
     return;
   }
   try {
     const model = globalThis.PayrollCore.buildAssignments(state.rows);
     sourceLines = model.lines;
-    sourceReviewCount = model.reviewRows.length + model.unassigned.length;
+    sourceReviewModel = model;
+    sourceLoaded = true;
     lastReadAt = state.readAt || null;
     populateFilters(sourceLines);
     filtersPanel.hidden = false;
     applyFilters();
   } catch (_) {
     sourceLines = [];
-    sourceReviewCount = 0;
+    sourceReviewModel = { reviewRows: [], unassigned: [] };
+    sourceLoaded = false;
     clearTable();
     message.textContent = "No se pudo interpretar la respuesta privada. No se mostraron datos anteriores.";
     readState.dataset.state = "error";
