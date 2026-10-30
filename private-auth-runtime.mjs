@@ -1,4 +1,7 @@
 const STORAGE_KEY = "lrs.private.auth.session";
+const CALLBACK_KEYS = Object.freeze([
+  "access_token", "code", "error", "error_code", "error_description", "refresh_token", "token_hash", "type"
+]);
 
 function browserSessionStorage() {
   try { return globalThis.sessionStorage; } catch (_) { return null; }
@@ -6,6 +9,70 @@ function browserSessionStorage() {
 
 function disabled(reason) {
   return Object.freeze({ config: { enabled: false }, authClient: null, sessionStorage: null, reason });
+}
+
+/**
+ * Consume the Supabase Auth callback before the page starts loading private data.
+ * Email invitations use a one-time implicit session by default, while sign-in
+ * links initiated by this page use PKCE. Credentials are removed from the URL
+ * before any Auth exchange and never included in the returned status.
+ */
+export async function consumePrivateAuthCallback(auth, {
+  locationObject = globalThis.location,
+  historyObject = globalThis.history
+} = {}) {
+  if (!auth || !locationObject?.href) return Object.freeze({ status: "none", flow: null });
+
+  let url;
+  try { url = new URL(locationObject.href); } catch (_) { return Object.freeze({ status: "none", flow: null }); }
+  const query = url.searchParams;
+  const fragment = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
+  const has = key => query.has(key) || fragment.has(key);
+  const get = key => query.get(key) ?? fragment.get(key);
+  if (!CALLBACK_KEYS.some(has)) return Object.freeze({ status: "none", flow: null });
+
+  // Never process a callback while its credentials remain in the address bar.
+  if (!historyObject || typeof historyObject.replaceState !== "function") {
+    return Object.freeze({ status: "error", flow: "unsupported" });
+  }
+  try {
+    historyObject.replaceState(historyObject.state ?? null, "", `${url.origin}${url.pathname}`);
+  } catch (_) {
+    return Object.freeze({ status: "error", flow: "unsupported" });
+  }
+
+  if (get("error") || get("error_code") || get("error_description")) {
+    return Object.freeze({ status: "error", flow: "auth-error" });
+  }
+
+  try {
+    const code = get("code");
+    if (code) {
+      if (typeof auth.exchangeCodeForSession !== "function") return Object.freeze({ status: "error", flow: "pkce" });
+      const result = await auth.exchangeCodeForSession(code);
+      return Object.freeze({ status: result?.error || !result?.data?.session ? "error" : "success", flow: "pkce" });
+    }
+
+    const type = get("type");
+    const tokenHash = get("token_hash");
+    if (type === "invite" && tokenHash) {
+      if (typeof auth.verifyOtp !== "function") return Object.freeze({ status: "error", flow: "invite-token-hash" });
+      const result = await auth.verifyOtp({ token_hash: tokenHash, type: "invite" });
+      return Object.freeze({ status: result?.error || !result?.data?.session ? "error" : "success", flow: "invite-token-hash" });
+    }
+
+    const accessToken = get("access_token");
+    const refreshToken = get("refresh_token");
+    if (type === "invite" && accessToken && refreshToken) {
+      if (typeof auth.setSession !== "function") return Object.freeze({ status: "error", flow: "invite" });
+      const result = await auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      return Object.freeze({ status: result?.error || !result?.data?.session ? "error" : "success", flow: "invite" });
+    }
+  } catch (_) {
+    return Object.freeze({ status: "error", flow: get("type") === "invite" ? "invite" : "pkce" });
+  }
+
+  return Object.freeze({ status: "error", flow: "unsupported" });
 }
 
 export function isSupabasePublishableKey(value) {
@@ -45,7 +112,7 @@ export function createPrivateAuthRuntime(input = {}, { getOrigin = () => globalT
         storageKey: STORAGE_KEY,
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: "pkce"
       }
     });

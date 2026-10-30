@@ -1,4 +1,4 @@
-import { createPrivateAuthRuntime, isSupabasePublishableKey } from "./private-auth-runtime.mjs";
+import { consumePrivateAuthCallback, createPrivateAuthRuntime, isSupabasePublishableKey } from "./private-auth-runtime.mjs";
 
 export const SUPABASE_BROWSER_SDK_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0";
 const CONFIG_KEY = "LRS_PUBLIC_RUNTIME_CONFIG";
@@ -70,7 +70,13 @@ export async function loadPrivateAuthRuntime(options = {}) {
     const createClient = await (options.loadSdk || (() => loadSupabaseSdk({ documentObject: options.documentObject, globalObject })))();
     const input = { config, createClient };
     if (Object.hasOwn(options, "sessionStorage")) input.sessionStorage = options.sessionStorage;
-    return createPrivateAuthRuntime(input, { getOrigin: () => origin });
+    const runtime = createPrivateAuthRuntime(input, { getOrigin: () => origin });
+    if (!runtime.authClient) return runtime;
+    const authCallback = await consumePrivateAuthCallback(runtime.authClient.auth, {
+      locationObject: options.locationObject || globalObject.location,
+      historyObject: options.historyObject || globalObject.history
+    });
+    return Object.freeze({ ...runtime, authCallback });
   } catch (_) {
     return unavailable("auth_sdk_unavailable");
   }
