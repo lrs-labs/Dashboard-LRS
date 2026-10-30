@@ -1,0 +1,263 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createSecurePayrollClient, readPrivatePayroll } from "../secure-payroll-client.mjs";
+
+const config = Object.freeze({
+  enabled: true,
+  supabaseUrl: "https://project.example.supabase.co",
+  publishableKey: "fixture-publishable-value",
+  allowedOrigin: "https://lrsbyor.github.io"
+});
+
+function memoryStorage(values = {}) {
+  const map = new Map(Object.entries(values));
+  return {
+    getItem: key => map.get(key) ?? null,
+    setItem: (key, value) => map.set(key, String(value)),
+    removeItem: key => map.delete(key),
+    entries: () => [...map.entries()]
+  };
+}
+
+function fakeAuth(session = null) {
+  const listeners = new Set();
+  const calls = { oauth: [], otp: [], signOut: 0 };
+  return {
+    calls,
+    emit(event, nextSession) { for (const listener of listeners) listener(event, nextSession); },
+    auth: {
+      getSession: async () => ({ data: { session }, error: null }),
+      onAuthStateChange: listener => {
+        listeners.add(listener);
+        return { data: { subscription: { unsubscribe: () => listeners.delete(listener) } } };
+      },
+      signInWithOAuth: async options => { calls.oauth.push(options); return { data: {}, error: null }; },
+      signInWithOtp: async options => { calls.otp.push(options); return { data: {}, error: null }; },
+      signOut: async () => { calls.signOut++; for (const listener of listeners) listener("SIGNED_OUT", null); return { error: null }; }
+    }
+  };
+}
+
+const okResponse = (payload, status = 200) => ({ status, ok: status >= 200 && status < 300, json: async () => payload });
+
+test("missing runtime fails closed and removes only old payroll snapshots", async () => {
+  const storage = memoryStorage({ "opsdash3:data": "old rows", "opsdash3:tab": "old prices", "opsdash3:theme": "dark" });
+  const auth = fakeAuth({ access_token: "synthetic-token" });
+  let fetches = 0;
+  const client = createSecurePayrollClient({ authClient: auth, fetcher: async () => { fetches++; }, storage });
+  const result = await client.start();
+  assert.equal(result.status, "unconfigured");
+  assert.equal(result.rows, null);
+  assert.equal(fetches, 0);
+  assert.equal(storage.getItem("opsdash3:data"), null);
+  assert.equal(storage.getItem("opsdash3:tab"), null);
+  assert.equal(storage.getItem("opsdash3:theme"), "dark");
+});
+
+test("signed-out user sees no stale data and the endpoint is not called", async () => {
+  const storage = memoryStorage({ "opsdash3:data": "stale" });
+  const auth = fakeAuth(null);
+  let fetches = 0;
+  const client = createSecurePayrollClient({ config, authClient: auth, fetcher: async () => { fetches++; }, storage });
+  const result = await client.start();
+  assert.equal(result.status, "signed_out");
+  assert.equal(result.rows, null);
+  assert.equal(fetches, 0);
+  assert.equal(storage.getItem("opsdash3:data"), null);
+});
+
+test("private read sends only a fresh no-store authenticated request", async () => {
+  const auth = fakeAuth({ access_token: "signed-user-token" });
+  const rows = [{ date: "2026-10-07", tp: "Synthetic Tech", amountTP: 100 }];
+  const requests = [];
+  const client = createSecurePayrollClient({
+    config, authClient: auth, storage: memoryStorage(),
+    fetcher: async (url, options) => { requests.push({ url, options }); return okResponse({ schema: 1, readAt: "2026-10-29T12:00:00Z", rows }); }
+  });
+  const state = await client.start();
+  assert.equal(state.status, "ready");
+  assert.deepEqual(state.rows, rows);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://project.example.supabase.co/functions/v1/payroll-api");
+  assert.equal(requests[0].options.method, "POST");
+  assert.equal(requests[0].options.cache, "no-store");
+  assert.equal(requests[0].options.credentials, "omit");
+  assert.equal(requests[0].options.headers.authorization, "Bearer signed-user-token");
+  assert.equal(requests[0].options.headers.apikey, config.publishableKey);
+  assert.deepEqual(JSON.parse(requests[0].options.body), { action: "payroll.read" });
+});
+
+test("authorization denial clears the view and never falls back to public feeds", async () => {
+  const auth = fakeAuth({ access_token: "signed-user-token" });
+  let calls = 0;
+  const client = createSecurePayrollClient({
+    config, authClient: auth, storage: memoryStorage(),
+    fetcher: async () => { calls++; return okResponse({ error: "not_authorized" }, 403); }
+  });
+  const state = await client.start();
+  assert.equal(calls, 1);
+  assert.equal(state.status, "denied");
+  assert.equal(state.rows, null);
+});
+
+test("expired sessions and unavailable services expose no cached rows", async () => {
+  for (const [status, expected] of [[401, "signed_out"], [503, "unavailable"], [500, "error"]]) {
+    const client = createSecurePayrollClient({
+      config, authClient: fakeAuth({ access_token: "signed-user-token" }), storage: memoryStorage(),
+      fetcher: async () => okResponse({}, status)
+    });
+    const state = await client.start();
+    assert.equal(state.status, expected);
+    assert.equal(state.rows, null);
+  }
+});
+
+test("malformed API responses fail closed", async () => {
+  const result = await readPrivatePayroll({
+    endpoint: "https://project.example.supabase.co/functions/v1/payroll-api",
+    publishableKey: config.publishableKey,
+    accessToken: "signed-user-token",
+    fetcher: async () => okResponse({ schema: 99, rows: [{ secret: "should not render" }] })
+  });
+  assert.deepEqual(result, { state: "error", rows: null });
+});
+
+test("email sign-in sends a one-time link only for the configured origin and never auto-creates users", async () => {
+  const previousLocation = globalThis.location;
+  globalThis.location = { origin: "https://lrsbyor.github.io", href: "https://lrsbyor.github.io/Dashboard-LRS/payroll-private.html?old=callback#stale" };
+  try {
+    const auth = fakeAuth(null);
+    const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
+    await client.start();
+    const result = await client.requestEmailLink("  Owner.Test@Example.com ");
+    assert.equal(result.status, "email_sent");
+    assert.equal(auth.calls.oauth.length, 0);
+    assert.deepEqual(auth.calls.otp, [{ email: "owner.test@example.com", options: {
+      shouldCreateUser: false,
+      emailRedirectTo: "https://lrsbyor.github.io/Dashboard-LRS/payroll-private.html"
+    } }]);
+  } finally {
+    if (typeof previousLocation === "undefined") delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});
+
+test("email sign-in rejects invalid addresses and wrong origins before sending anything", async () => {
+  const previousLocation = globalThis.location;
+  globalThis.location = { origin: "https://attacker.example", href: "https://attacker.example/payroll-private.html" };
+  try {
+    const auth = fakeAuth(null);
+    const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
+    await client.start();
+    assert.equal((await client.requestEmailLink("not-an-email")).status, "email_error");
+    assert.equal((await client.requestEmailLink("owner@example.com")).status, "unconfigured");
+    assert.equal(auth.calls.otp.length, 0);
+  } finally {
+    if (typeof previousLocation === "undefined") delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});
+
+test("email-link errors never reveal account lookup details", async () => {
+  const previousLocation = globalThis.location;
+  globalThis.location = { origin: config.allowedOrigin, href: `${config.allowedOrigin}/Dashboard-LRS/payroll-private.html` };
+  try {
+    const auth = fakeAuth(null);
+    auth.auth.signInWithOtp = async () => ({ error: { message: "synthetic user lookup detail" } });
+    const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
+    await client.start();
+    const state = await client.requestEmailLink("fixture@example.test");
+    assert.equal(state.status, "email_error");
+    assert.doesNotMatch(state.message, /synthetic|fixture@example\.test/i);
+  } finally {
+    if (typeof previousLocation === "undefined") delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});
+
+test("rapid duplicate submissions issue only one in-flight email request", async () => {
+  const previousLocation = globalThis.location;
+  globalThis.location = { origin: config.allowedOrigin, href: `${config.allowedOrigin}/Dashboard-LRS/payroll-private.html` };
+  try {
+    const auth = fakeAuth(null);
+    let finish;
+    auth.auth.signInWithOtp = async () => new Promise(resolve => { finish = resolve; });
+    const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
+    await client.start();
+    const first = client.requestEmailLink("fixture@example.test");
+    await new Promise(resolve => setImmediate(resolve));
+    const second = await client.requestEmailLink("fixture@example.test");
+    assert.equal(second.status, "authorizing");
+    finish({ error: null });
+    assert.equal((await first).status, "email_sent");
+  } finally {
+    if (typeof previousLocation === "undefined") delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});
+
+test("sign-out clears in-memory rows and legacy payroll snapshots", async () => {
+  const storage = memoryStorage({ "opsdash3:data": "stale", "opsdash3:tab": "stale", "opsdash3:theme": "light" });
+  const auth = fakeAuth({ access_token: "signed-user-token" });
+  const client = createSecurePayrollClient({
+    config, authClient: auth, storage,
+    fetcher: async () => okResponse({ schema: 1, rows: [{ date: "2026-10-07", tp: "Synthetic Tech", amountTP: 10 }] })
+  });
+  await client.start();
+  const state = await client.signOut();
+  assert.equal(state.status, "signed_out");
+  assert.equal(state.rows, null);
+  assert.equal(auth.calls.signOut, 1);
+  assert.equal(storage.getItem("opsdash3:data"), null);
+  assert.equal(storage.getItem("opsdash3:tab"), null);
+  assert.equal(storage.getItem("opsdash3:theme"), "light");
+});
+
+test("a late response after sign-out cannot restore the old table", async () => {
+  const auth = fakeAuth({ access_token: "signed-user-token" });
+  let resolveFetch;
+  const client = createSecurePayrollClient({
+    config, authClient: auth, storage: memoryStorage(),
+    fetcher: () => new Promise(resolve => { resolveFetch = resolve; })
+  });
+  const start = client.start();
+  await new Promise(resolve => setImmediate(resolve));
+  auth.emit("SIGNED_OUT", null);
+  resolveFetch(okResponse({ schema: 1, rows: [{ date: "2026-10-07", tp: "Synthetic Tech", amountTP: 10 }] }));
+  await start;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(client.getState().status, "signed_out");
+  assert.equal(client.getState().rows, null);
+});
+
+test("a private session expires after its fixed lease, revokes auth, and clears cached payroll keys", async () => {
+  let now = 100_000, scheduled;
+  const auth = fakeAuth({ access_token: "signed-user-token" });
+  const oldData = memoryStorage({ "opsdash3:data": "old payroll" });
+  const sessionStorage = memoryStorage();
+  const client = createSecurePayrollClient({ config, authClient: auth, storage: oldData, sessionStorage,
+    now: () => now, maxSessionAgeMs: 500,
+    schedule: (callback, delay) => { scheduled = { callback, delay }; return scheduled; }, cancel: () => {},
+    fetcher: async () => okResponse({ schema: 1, rows: [{ date: "2026-10-07", tp: "Fixture Tech", amountTP: 10 }] }) });
+  const ready = await client.start();
+  assert.equal(ready.status, "ready");
+  assert.equal(scheduled.delay, 500);
+  now += 500;
+  scheduled.callback();
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(client.getState().status, "signed_out");
+  assert.match(client.getState().message, /sesión privada expiró/i);
+  assert.equal(client.getState().rows, null);
+  assert.equal(auth.calls.signOut, 1);
+  assert.equal(oldData.getItem("opsdash3:data"), null);
+  assert.equal(sessionStorage.getItem("lrs.private.session.started-at"), null);
+});
+
+test("server-reported expiration signs out instead of leaving a refreshable session active", async () => {
+  const auth = fakeAuth({ access_token: "expired-token" });
+  const client = createSecurePayrollClient({ config, authClient: auth, sessionStorage: memoryStorage(), fetcher: async () => okResponse({}, 401) });
+  const state = await client.start();
+  assert.equal(state.status, "signed_out");
+  assert.equal(auth.calls.signOut, 1);
+});
