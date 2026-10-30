@@ -21,7 +21,7 @@ function memoryStorage(values = {}) {
 
 function fakeAuth(session = null) {
   const listeners = new Set();
-  const calls = { oauth: [], signOut: 0 };
+  const calls = { oauth: [], otp: [], signOut: 0 };
   return {
     calls,
     emit(event, nextSession) { for (const listener of listeners) listener(event, nextSession); },
@@ -32,6 +32,7 @@ function fakeAuth(session = null) {
         return { data: { subscription: { unsubscribe: () => listeners.delete(listener) } } };
       },
       signInWithOAuth: async options => { calls.oauth.push(options); return { data: {}, error: null }; },
+      signInWithOtp: async options => { calls.otp.push(options); return { data: {}, error: null }; },
       signOut: async () => { calls.signOut++; for (const listener of listeners) listener("SIGNED_OUT", null); return { error: null }; }
     }
   };
@@ -121,35 +122,74 @@ test("malformed API responses fail closed", async () => {
   assert.deepEqual(result, { state: "error", rows: null });
 });
 
-test("Google sign-in starts only on the configured origin", async () => {
+test("email sign-in sends a one-time link only for the configured origin and never auto-creates users", async () => {
   const previousLocation = globalThis.location;
-  globalThis.location = { origin: "https://lrsbyor.github.io", href: "https://lrsbyor.github.io/payroll-private.html" };
+  globalThis.location = { origin: "https://lrsbyor.github.io", href: "https://lrsbyor.github.io/Dashboard-LRS/payroll-private.html?old=callback#stale" };
   try {
     const auth = fakeAuth(null);
     const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
     await client.start();
-    const result = await client.signIn();
-    assert.equal(result.status, "authorizing");
-    assert.equal(auth.calls.oauth.length, 1);
-    assert.equal(auth.calls.oauth[0].provider, "google");
-    assert.equal(auth.calls.oauth[0].options.redirectTo, globalThis.location.href);
-    assert.equal(auth.calls.oauth[0].options.scopes, "openid email");
+    const result = await client.requestEmailLink("  Owner.Test@Example.com ");
+    assert.equal(result.status, "email_sent");
+    assert.equal(auth.calls.oauth.length, 0);
+    assert.deepEqual(auth.calls.otp, [{ email: "owner.test@example.com", options: {
+      shouldCreateUser: false,
+      emailRedirectTo: "https://lrsbyor.github.io/Dashboard-LRS/payroll-private.html"
+    } }]);
   } finally {
     if (typeof previousLocation === "undefined") delete globalThis.location;
     else globalThis.location = previousLocation;
   }
 });
 
-test("unauthorized origin cannot initiate Google sign-in", async () => {
+test("email sign-in rejects invalid addresses and wrong origins before sending anything", async () => {
   const previousLocation = globalThis.location;
   globalThis.location = { origin: "https://attacker.example", href: "https://attacker.example/payroll-private.html" };
   try {
     const auth = fakeAuth(null);
     const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
     await client.start();
-    const result = await client.signIn();
-    assert.equal(result.status, "unconfigured");
-    assert.equal(auth.calls.oauth.length, 0);
+    assert.equal((await client.requestEmailLink("not-an-email")).status, "email_error");
+    assert.equal((await client.requestEmailLink("owner@example.com")).status, "unconfigured");
+    assert.equal(auth.calls.otp.length, 0);
+  } finally {
+    if (typeof previousLocation === "undefined") delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});
+
+test("email-link errors never reveal account lookup details", async () => {
+  const previousLocation = globalThis.location;
+  globalThis.location = { origin: config.allowedOrigin, href: `${config.allowedOrigin}/Dashboard-LRS/payroll-private.html` };
+  try {
+    const auth = fakeAuth(null);
+    auth.auth.signInWithOtp = async () => ({ error: { message: "synthetic user lookup detail" } });
+    const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
+    await client.start();
+    const state = await client.requestEmailLink("fixture@example.test");
+    assert.equal(state.status, "email_error");
+    assert.doesNotMatch(state.message, /synthetic|fixture@example\.test/i);
+  } finally {
+    if (typeof previousLocation === "undefined") delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
+});
+
+test("rapid duplicate submissions issue only one in-flight email request", async () => {
+  const previousLocation = globalThis.location;
+  globalThis.location = { origin: config.allowedOrigin, href: `${config.allowedOrigin}/Dashboard-LRS/payroll-private.html` };
+  try {
+    const auth = fakeAuth(null);
+    let finish;
+    auth.auth.signInWithOtp = async () => new Promise(resolve => { finish = resolve; });
+    const client = createSecurePayrollClient({ config, authClient: auth, storage: memoryStorage() });
+    await client.start();
+    const first = client.requestEmailLink("fixture@example.test");
+    await new Promise(resolve => setImmediate(resolve));
+    const second = await client.requestEmailLink("fixture@example.test");
+    assert.equal(second.status, "authorizing");
+    finish({ error: null });
+    assert.equal((await first).status, "email_sent");
   } finally {
     if (typeof previousLocation === "undefined") delete globalThis.location;
     else globalThis.location = previousLocation;

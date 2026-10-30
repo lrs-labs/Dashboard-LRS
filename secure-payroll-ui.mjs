@@ -6,6 +6,8 @@ import { generatePayrollInvoicePdf } from "./payroll-invoice-pdf.mjs";
 const runtime = await loadPrivateAuthRuntime();
 const $ = id => document.getElementById(id);
 const signInButton = $("signIn");
+const emailSignInForm = $("emailSignInForm");
+const signInEmailInput = $("signInEmail");
 const refreshButton = $("refresh");
 const signOutButton = $("signOut");
 const printButton = $("printInvoice");
@@ -253,6 +255,8 @@ function renderState(state) {
     unconfigured: "Sin conexión privada",
     signed_out: "Sesión no iniciada",
     authorizing: "Validando identidad",
+    email_sent: "Enlace solicitado",
+    email_error: "No se pudo solicitar el enlace",
     loading: "Leyendo la hoja",
     ready: "Actualizado desde la hoja",
     denied: "Acceso no autorizado",
@@ -264,7 +268,7 @@ function renderState(state) {
   readStateText.textContent = labels[state.status] || "Estado desconocido";
   message.textContent = state.message;
   const configured = Boolean(runtime.config?.enabled && runtime.authClient);
-  signInButton.hidden = !configured || state.status !== "signed_out";
+  emailSignInForm.hidden = !configured || !["signed_out", "email_sent", "email_error"].includes(state.status);
   refreshButton.hidden = !configured || !["ready", "error", "unavailable", "denied"].includes(state.status);
   signOutButton.hidden = !configured || !["ready", "error", "unavailable", "denied", "loading"].includes(state.status);
   signInButton.disabled = ["authorizing", "loading"].includes(state.status);
@@ -325,7 +329,12 @@ $("closeInvoice").addEventListener("click", () => { invoicePanel.hidden = true; 
 $("driveOnly").addEventListener("click", () => { message.textContent = "La integración segura con Drive todavía no está configurada; no se creó ni se reemplazó ningún archivo."; });
 $("driveAndResend").addEventListener("click", () => { message.textContent = "La integración de Drive y correo todavía no está configurada; no se envió ningún mensaje."; });
 $("retryEmailOnly").addEventListener("click", () => { message.textContent = "El servicio seguro de correo todavía no está configurado; no se inició ningún reenvío."; });
-signInButton.addEventListener("click", () => { void controller.signIn(); });
+emailSignInForm.addEventListener("submit", event => {
+  event.preventDefault();
+  const email = signInEmailInput.value;
+  signInEmailInput.value = "";
+  void controller.requestEmailLink(email);
+});
 refreshButton.addEventListener("click", () => { void controller.refresh(); });
 signOutButton.addEventListener("click", () => { void controller.signOut(); });
 

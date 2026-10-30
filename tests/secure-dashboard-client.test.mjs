@@ -12,6 +12,7 @@ function authClient(session = { access_token: "fixture-session" }) {
       async getSession() { return { data: { session }, error: null }; },
       onAuthStateChange(callback) { callbacks.push(callback); return { data: { subscription: { unsubscribe() {} } } }; },
       async signInWithOAuth(options) { this.oauthOptions = options; return { error: null }; },
+      async signInWithOtp(options) { this.otpOptions = options; return { error: null }; },
       async signOut() { return { error: null }; }
     }
   };
@@ -38,7 +39,29 @@ test("dashboard client refuses the wrong origin and never falls back to public f
   const state = await client.start();
   assert.equal(state.status, "unconfigured");
   assert.equal(calls, 0);
-  assert.equal(await client.signIn().then(result => result.status), "unconfigured");
+  assert.equal(await client.requestEmailLink("owner@example.com").then(result => result.status), "unconfigured");
+});
+
+test("dashboard email sign-in uses the configured origin and disables automatic account creation", async () => {
+  const auth = authClient(null);
+  const states = [];
+  const client = createSecureDashboardClient({ config, authClient: auth, getOrigin: () => config.allowedOrigin,
+    storage: null, onState: state => states.push(state.status) });
+  await client.start();
+  const previousLocation = globalThis.location;
+  globalThis.location = { origin: config.allowedOrigin, href: `${config.allowedOrigin}/private-dashboard.html` };
+  try {
+    const result = await client.requestEmailLink("Admin.Test@example.com");
+    assert.equal(result.status, "email_sent");
+    assert.deepEqual(auth.auth.otpOptions, { email: "admin.test@example.com", options: {
+      shouldCreateUser: false,
+      emailRedirectTo: globalThis.location.href
+    } });
+    assert.ok(states.includes("authorizing"));
+  } finally {
+    if (typeof previousLocation === "undefined") delete globalThis.location;
+    else globalThis.location = previousLocation;
+  }
 });
 
 test("dashboard client clears data on sign-out and rejects late results after the session ends", async () => {

@@ -6,7 +6,9 @@ const MESSAGES = Object.freeze({
   unconfigured: "El acceso privado aún no está configurado. Esta vista no consulta fuentes públicas ni usa datos guardados.",
   signed_out: "Inicia sesión para validar tu acceso a Nómina.",
   session_expired: "La sesión privada expiró. Inicia sesión de nuevo.",
-  authorizing: "Abriendo el inicio de sesión seguro…",
+  authorizing: "Solicitando un enlace seguro…",
+  email_sent: "Si esta cuenta ya está habilitada, recibirás un enlace de acceso. Revisa tu correo de trabajo.",
+  email_error: "No se pudo solicitar el acceso. Verifica la dirección e inténtalo de nuevo más tarde.",
   loading: "Consultando la hoja con tu sesión autorizada…",
   ready: "Datos actualizados desde la hoja.",
   denied: "Tu cuenta no tiene acceso a Nómina. Contacta a una persona administradora.",
@@ -82,6 +84,7 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
   let state = { status: "unconfigured", message: MESSAGES.unconfigured, rows: null, readAt: null };
   let authSubscription = null;
   let requestVersion = 0;
+  let emailRequestInFlight = false;
   let validated = validatePrivateRuntime(config, authClient);
   let expiredNotice = false;
   let expireSession = async () => {};
@@ -151,27 +154,39 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
     }
   }
 
-  async function signIn() {
+  async function requestEmailLink(email) {
+    if (emailRequestInFlight) return state;
     clearLegacyPayrollCache(storage);
     expiredNotice = false;
     sessionLease.stop();
-    if (!validated.ok || typeof authClient.auth.signInWithOAuth !== "function") return publish("unconfigured");
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return publish("email_error");
+    }
+    if (!validated.ok || typeof authClient.auth.signInWithOtp !== "function") return publish("unconfigured");
     const origin = globalThis.location?.origin;
     if (origin !== config.allowedOrigin) return publish("unconfigured");
+    let emailRedirectTo;
+    try {
+      const redirect = new URL(globalThis.location.href);
+      if (redirect.origin !== config.allowedOrigin) return publish("unconfigured");
+      redirect.search = "";
+      redirect.hash = "";
+      emailRedirectTo = redirect.href;
+    } catch (_) { return publish("unconfigured"); }
+    emailRequestInFlight = true;
     publish("authorizing");
     try {
-      const { error } = await authClient.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: globalThis.location.href,
-          scopes: "openid email",
-          queryParams: { prompt: "select_account" }
-        }
+      const { error } = await authClient.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: { shouldCreateUser: false, emailRedirectTo }
       });
-      if (error) return publish("error");
-      return state;
+      if (error) return publish("email_error");
+      return publish("email_sent");
     } catch (_) {
-      return publish("error");
+      return publish("email_error");
+    } finally {
+      emailRequestInFlight = false;
     }
   }
 
@@ -223,5 +238,5 @@ export function createSecurePayrollClient({ config, authClient, fetcher, storage
     state = { status: "signed_out", message: MESSAGES.signed_out, rows: null, readAt: null };
   }
 
-  return { start, signIn, refresh, signOut, dispose, getState: () => state };
+  return { start, requestEmailLink, refresh, signOut, dispose, getState: () => state };
 }

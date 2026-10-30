@@ -4,9 +4,11 @@ import { calculateHourlyComparison, filterDashboardRows, normalizeDashboardRows,
 
 const runtime = await loadPrivateAuthRuntime();
 const $ = id => document.getElementById(id);
+const emailSignInForm = $("emailSignInForm");
+const signInEmailInput = $("signInEmail");
 const workspace = $("workspace");
 const accessMessage = $("accessMessage");
-const stateLabels = { unconfigured: "Sin conexión privada", signed_out: "Sesión no iniciada", authorizing: "Validando identidad", loading: "Leyendo el Sheet", ready: "Actualizado desde el Sheet", denied: "Acceso no autorizado", unavailable: "Servicio no disponible", error: "No se pudo actualizar", signing_out: "Cerrando sesión" };
+const stateLabels = { unconfigured: "Sin conexión privada", signed_out: "Sesión no iniciada", authorizing: "Solicitando enlace", email_sent: "Enlace solicitado", email_error: "No se pudo solicitar", loading: "Leyendo el Sheet", ready: "Actualizado desde el Sheet", denied: "Acceso no autorizado", unavailable: "Servicio no disponible", error: "No se pudo actualizar", signing_out: "Cerrando sesión" };
 const monthNames = new Intl.DateTimeFormat("es-US", { month: "long", timeZone: "UTC" });
 const number = new Intl.NumberFormat("es-US");
 const updatedFormatter = new Intl.DateTimeFormat("es-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" });
@@ -142,7 +144,7 @@ function renderState(state) {
   setText($("readStateText"), stateLabels[state.status] || "Estado desconocido");
   setText(accessMessage, state.message);
   const configured = runtime.config?.enabled === true && Boolean(runtime.authClient);
-  $("signIn").hidden = !configured || state.status !== "signed_out";
+  emailSignInForm.hidden = !configured || !["signed_out", "email_sent", "email_error"].includes(state.status);
   $("refresh").hidden = !configured || !["ready", "error", "unavailable", "denied"].includes(state.status);
   $("signOut").hidden = !configured || !["ready", "error", "unavailable", "denied", "loading"].includes(state.status);
   $("signIn").disabled = ["authorizing", "loading"].includes(state.status);
@@ -168,7 +170,12 @@ for (const id of ["yearFilter", "monthFilter", "statusFilter", "activityFilter",
 $("searchFilter").addEventListener("input", renderDashboard);
 $("hoursInput").addEventListener("input", renderCalculator);
 for (const button of document.querySelectorAll("[data-view]")) button.addEventListener("click", () => setView(button.dataset.view));
-$("signIn").addEventListener("click", () => { void controller.signIn(); });
+emailSignInForm.addEventListener("submit", event => {
+  event.preventDefault();
+  const email = signInEmailInput.value;
+  signInEmailInput.value = "";
+  void controller.requestEmailLink(email);
+});
 $("refresh").addEventListener("click", () => { void controller.refresh(); });
 $("signOut").addEventListener("click", () => { void controller.signOut(); });
 void controller.start();

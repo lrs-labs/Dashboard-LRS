@@ -32,6 +32,11 @@
     .access-label { color:var(--blue); font-size:10px; font-weight:750; text-transform:uppercase; letter-spacing:.1em; }
     .access-panel h2 { margin-top:5px; }
     .access-message { max-width:720px; }
+    .email-signin { display:grid; gap:6px; min-width:min(350px,100%); }
+    .email-signin label { color:var(--muted); font-size:11px; font-weight:650; }
+    .email-signin-row { display:flex; gap:8px; }
+    .email-signin input { width:100%; min-width:0; height:38px; border:1px solid var(--line); border-radius:9px; padding:0 10px; background:var(--surface); color:var(--ink); }
+    .email-signin[hidden] { display:none; }
     .button { min-height:38px; border:1px solid var(--line); border-radius:10px; padding:0 13px; color:var(--ink); background:var(--surface); transition:transform 140ms var(--ease),background 140ms ease,border-color 140ms ease; }
     .button:hover:not(:disabled) { background:var(--soft); border-color:#cfd4dd; }
     .button:active:not(:disabled) { transform:scale(.98); }
@@ -100,7 +105,7 @@
     </section>
     <section class="panel access-panel" aria-labelledby="accessTitle">
       <div><span class="access-label">Acceso protegido</span><h2 id="accessTitle">Validación de acceso</h2><p id="accessMessage" class="access-message" role="status" aria-live="polite">El acceso privado no está configurado. No se consultarán fuentes públicas ni datos guardados.</p></div>
-      <div class="actions"><button id="signIn" class="button primary" type="button" hidden>Continuar con Google</button><button id="refresh" class="button" type="button" hidden>Actualizar</button><button id="signOut" class="button" type="button" hidden>Cerrar sesión</button></div>
+      <div class="actions"><form id="emailSignInForm" class="email-signin" hidden><label for="signInEmail">Correo de trabajo</label><div class="email-signin-row"><input id="signInEmail" type="email" autocomplete="email" autocapitalize="none" inputmode="email" maxlength="254" required><button id="signIn" class="button primary" type="submit">Enviar enlace de acceso</button></div></form><button id="refresh" class="button" type="button" hidden>Actualizar</button><button id="signOut" class="button" type="button" hidden>Cerrar sesión</button></div>
     </section>
     <div id="workspace" hidden>
       <nav class="topnav" role="tablist" aria-label="Secciones privadas">
@@ -141,6 +146,7 @@
     </div>
     <p class="footnote">El Sheet es la fuente operativa de verdad. Esta vista es de solo lectura; no guarda datos localmente, no modifica pagos y no recurre a GViz, JSONP ni cachés cuando la conexión falla.</p>
   </main>
+  <script src="./private-runtime-config.js"></script>
   <script type="module" src="./private-dashboard-ui.mjs"></script>
 </body>
 </html>

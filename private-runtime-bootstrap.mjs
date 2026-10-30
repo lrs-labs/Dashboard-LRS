@@ -1,9 +1,37 @@
 import { createPrivateAuthRuntime, isSupabasePublishableKey } from "./private-auth-runtime.mjs";
 
 export const SUPABASE_BROWSER_SDK_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0";
-const CONFIG_PATH = "/api/private-runtime-config";
+const CONFIG_KEY = "LRS_PUBLIC_RUNTIME_CONFIG";
+const CONFIG_FIELDS = Object.freeze(["allowedOrigin", "enabled", "publishableKey", "supabaseUrl"]);
 
-function unavailable(reason) { return createPrivateAuthRuntime({ config: { enabled: false, reason } }); }
+function unavailable(reason) {
+  const runtime = createPrivateAuthRuntime({ config: { enabled: false, reason } });
+  return Object.freeze({ ...runtime, reason });
+}
+
+function isAllowedOrigin(value, pageOrigin) {
+  if (typeof value !== "string" || value !== pageOrigin) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && parsed.origin === value && parsed.pathname === "/" && !parsed.search && !parsed.hash;
+  } catch (_) { return false; }
+}
+
+function validateConfig(config, pageOrigin) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return "runtime_config_unavailable";
+  if (config.enabled !== true) return "runtime_config_unavailable";
+  const keys = Object.keys(config).sort();
+  if (keys.length !== CONFIG_FIELDS.length || keys.some((key, index) => key !== CONFIG_FIELDS[index])) return "runtime_config_invalid";
+  if (!isAllowedOrigin(config.allowedOrigin, pageOrigin) || !isSupabasePublishableKey(config.publishableKey)) return "runtime_config_invalid";
+  if (typeof config.supabaseUrl !== "string") return "runtime_config_invalid";
+  try {
+    const url = new URL(config.supabaseUrl);
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.origin !== config.supabaseUrl.replace(/\/$/, "")) {
+      return "runtime_config_invalid";
+    }
+  } catch (_) { return "runtime_config_invalid"; }
+  return null;
+}
 
 function loadSupabaseSdk({ documentObject = globalThis.document, globalObject = globalThis } = {}) {
   if (typeof globalObject.supabase?.createClient === "function") return Promise.resolve(globalObject.supabase.createClient);
@@ -22,31 +50,28 @@ function loadSupabaseSdk({ documentObject = globalThis.document, globalObject = 
   });
 }
 
-/** Fetch private deployment config at runtime; this source contains no project URL or key value. */
+/**
+ * GitHub Pages cannot execute a server route. It receives only the Supabase
+ * project URL and publishable browser key from a deployment-time injected
+ * script. No config means no SDK initialization and no data requests.
+ */
 export async function loadPrivateAuthRuntime(options = {}) {
-  const { fetcher = globalThis.fetch?.bind(globalThis), loadSdk = loadSupabaseSdk,
-    getOrigin = () => globalThis.location?.origin, sessionStorage } = options;
-  const origin = getOrigin();
-  if (typeof origin !== "string" || !/^https:\/\//.test(origin) || typeof fetcher !== "function" || typeof loadSdk !== "function") {
-    return unavailable("runtime_config_unavailable");
-  }
+  const globalObject = options.globalObject || globalThis;
+  const origin = (options.getOrigin || (() => globalObject.location?.origin))();
+  if (typeof origin !== "string" || !/^https:\/\//.test(origin)) return unavailable("origin_not_allowed");
+
+  const config = Object.hasOwn(options, "runtimeConfig")
+    ? options.runtimeConfig
+    : globalObject[CONFIG_KEY];
+  const reason = validateConfig(config, origin);
+  if (reason) return unavailable(reason);
+
   try {
-    const response = await fetcher(`${origin}${CONFIG_PATH}`, {
-      method: "GET", mode: "same-origin", credentials: "omit", cache: "no-store", redirect: "error",
-      referrerPolicy: "no-referrer", headers: { accept: "application/json" }
-    });
-    if (!response?.ok || (response.url && new URL(response.url).origin !== origin)) return unavailable("runtime_config_unavailable");
-    const body = await response.json();
-    if (!body || body.allowedOrigin !== origin || typeof body.supabaseUrl !== "string" ||
-        typeof body.publishableKey !== "string" || !isSupabasePublishableKey(body.publishableKey)) {
-      return unavailable("runtime_config_invalid");
-    }
-    const createClient = await loadSdk();
-    const input = {
-      config: { enabled: true, supabaseUrl: body.supabaseUrl, publishableKey: body.publishableKey, allowedOrigin: body.allowedOrigin },
-      createClient
-    };
-    if (Object.hasOwn(options, "sessionStorage")) input.sessionStorage = sessionStorage;
+    const createClient = await (options.loadSdk || (() => loadSupabaseSdk({ documentObject: options.documentObject, globalObject })))();
+    const input = { config, createClient };
+    if (Object.hasOwn(options, "sessionStorage")) input.sessionStorage = options.sessionStorage;
     return createPrivateAuthRuntime(input, { getOrigin: () => origin });
-  } catch (_) { return unavailable("runtime_config_unavailable"); }
+  } catch (_) {
+    return unavailable("auth_sdk_unavailable");
+  }
 }
